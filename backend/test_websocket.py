@@ -6,7 +6,7 @@ import cv2
 import sys
 
 API_URL = "http://127.0.0.1:5000/api"
-WS_URL = "ws://127.0.0.1:5000/ws/verify"
+WS_URL = "ws://127.0.0.1:5000/api/verify"
 
 def make_post_request(url, data):
     req = urllib.request.Request(

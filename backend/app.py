@@ -101,7 +101,7 @@ app = FastAPI(title="AETHER_SHIELD API", version="2.0")
 # Enable CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origin_regex=".*",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -149,7 +149,7 @@ async def init_session():
 # --------------------------------------------------------------------------
 # Asynchronous WebSocket for real-time binary frame transmission
 # --------------------------------------------------------------------------
-@app.websocket("/ws/verify/{session_id}")
+@app.websocket("/api/verify/{session_id}")
 async def websocket_verify(websocket: WebSocket, session_id: str):
     await websocket.accept()
     print(f"[WS] Connection accepted for session: {session_id}")
