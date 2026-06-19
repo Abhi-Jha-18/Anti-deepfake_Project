@@ -55,8 +55,8 @@ def test_websocket_flow():
         import asyncio
         
         async def run_ws_test():
-            # Create a dummy image
-            dummy_img = np.zeros((480, 640, 3), dtype=np.uint8)
+            # Create a dummy 192x64 composite image
+            dummy_img = np.zeros((64, 192, 3), dtype=np.uint8)
             _, buffer = cv2.imencode('.jpg', dummy_img)
             dummy_bytes = buffer.tobytes()
             
@@ -78,9 +78,9 @@ def test_websocket_flow():
         loop = asyncio.get_event_loop()
         verify_data = loop.run_until_complete(run_ws_test())
         
-        if not verify_data.get("success") and "No face detected" in verify_data.get("error", ""):
+        if verify_data.get("success"):
             print("[3/4] /ws/verify connection: SUCCESS")
-            print("      WebSocket successfully accepted text metadata and raw binary image, returning: 'No face detected'")
+            print(f"      WebSocket successfully accepted composite binary image, returning Moire prob: {verify_data.get('moire_prob')}")
         else:
             print(f"[3/4] /ws/verify connection: UNEXPECTED RESPONSE - {verify_data}")
             return False
@@ -93,12 +93,24 @@ def test_websocket_flow():
 
     # 4. Test REST session verification (REST)
     try:
-        verdict_payload = { "session_id": session_id }
+        verdict_payload = { 
+            "session_id": session_id,
+            "motion_passed": True,
+            "gesture_passed": True,
+            "blink_detected": True,
+            "nose_variance": 1.5e-5,
+            "reflection_data": [
+                {"expected_color": c, "eye_rgb": [120, 100, 110], "skin_rgb": [150, 130, 140]}
+                for c in sequence
+            ],
+            "ear_sequence": [0.25, 0.24, 0.18, 0.26]
+        }
         verdict_data = make_post_request(f"{API_URL}/verify_session", verdict_payload)
         
-        if not verdict_data.get("success") and "Incomplete verification" in verdict_data.get("error", ""):
+        if verdict_data.get("success") and verdict_data.get("verdict") in ["VERIFIED_HUMAN", "SPOOF_DETECTED"]:
             print("[4/4] /verify_session check: SUCCESS")
-            print("      API successfully blocked incomplete session validation.")
+            print(f"      Liveness Verdict: {verdict_data.get('verdict')}")
+            print(f"      Reason: {verdict_data.get('reason')}")
         else:
             print(f"[4/4] /verify_session check: UNEXPECTED RESPONSE - {verdict_data}")
             return False

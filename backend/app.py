@@ -165,7 +165,7 @@ async def websocket_verify(websocket: WebSocket, session_id: str):
                 await websocket.send_json({"success": False, "error": f"Invalid metadata format: {str(e)}"})
                 continue
                 
-            # 2. Receive raw binary image bytes
+            # 2. Receive raw binary image bytes (which is the 192x64 patch composite)
             try:
                 img_bytes = await websocket.receive_bytes()
             except Exception as e:
@@ -178,38 +178,36 @@ async def websocket_verify(websocket: WebSocket, session_id: str):
                 await websocket.send_json({"success": False, "error": "Invalid or expired session ID."})
                 break
                 
-            # Process frame binary directly
-            res = liveness_detector.process_frame(img_bytes, is_binary=True)
-            if not res["success"]:
-                await websocket.send_json({"success": False, "error": res["error"]})
+            # Decode the 192x64 composite image
+            img = liveness_detector.decode_binary_image(img_bytes)
+            if img is None:
+                await websocket.send_json({"success": False, "error": "Failed to decode composite image."})
                 continue
                 
-            # Run Moire CNN prediction on cropped patches (forehead, cheek)
-            patches = res.get("patches", [])
+            # Slice composite image into forehead, left cheek, right cheek
+            h, w, c = img.shape
             moire_prob = 0.0
-            if patches:
-                moire_prob = float(moire_predictor.predict_patches(patches))
+            if w == 192 and h == 64:
+                patches = [
+                    img[0:64, 0:64],
+                    img[0:64, 64:128],
+                    img[0:64, 128:192]
+                ]
+                moire_prob = float(moire_predictor.predict_numpy_patches(patches))
+            else:
+                print(f"[WS] Warning: Image dimensions mismatch ({w}x{h}). Expected 192x64.")
                 
-            # Store frame metrics in session history
-            frame_entry = {
-                "expected_color": expected_color,
-                "eye_rgb": res["eye_rgb"],
-                "skin_rgb": res["skin_rgb"],
-                "ear": float(res["ear"]),
-                "landmarks": res["motion_landmarks"],
-                "moire_prob": moire_prob
-            }
-            session["frames"].append(frame_entry)
+            # Store Moire prediction in session
+            if "moire_probs" not in session:
+                session["moire_probs"] = []
+            session["moire_probs"].append(moire_prob)
             session_store.save_session(session_id, session)
             
-            # Send live metrics back to client
+            # Send live Moire metric back to client
             await websocket.send_json({
                 "success": True,
-                "ear": float(res["ear"]),
                 "moire_prob": moire_prob,
-                "left_iris": res.get("left_iris"),
-                "right_iris": res.get("right_iris"),
-                "message": f"Frame processed for color: {expected_color}"
+                "message": f"Composite patch processed for color: {expected_color}"
             })
             
     except WebSocketDisconnect:
@@ -233,42 +231,25 @@ async def verify_session(request: Request):
     if not session:
         return JSONResponse({"success": False, "error": "Invalid or expired session ID"}, status_code=400)
         
-    frames = session["frames"]
-    sequence = session["sequence"]
+    # Get local liveness metrics from client payload
+    motion_passed = bool(data.get("motion_passed", False))
+    gesture_passed = bool(data.get("gesture_passed", False))
+    blink_detected = bool(data.get("blink_detected", False))
+    nose_variance = float(data.get("nose_variance", 0.0))
+    reflection_data = data.get("reflection_data", [])
+    ear_sequence = data.get("ear_sequence", [])
     
-    # 4 flash color frames + 1 gesture challenge frame = 5 frames expected
-    expected_frames_count = len(sequence) + 1
-    if len(frames) < expected_frames_count:
-        return {
-            "success": False,
-            "error": f"Incomplete verification. Only {len(frames)} out of {expected_frames_count} steps completed."
-        }
-        
-    # 1. Challenge-Response Reflection Check (evaluated only on flash frames)
-    flash_frames = [f for f in frames if f["expected_color"] != "GESTURE"]
-    reflection_result = liveness_detector.verify_reflection_sequence(flash_frames)
+    # 1. Challenge-Response Reflection Check (evaluated on flash frames)
+    reflection_result = liveness_detector.verify_reflection_sequence(reflection_data)
     reflection_passed = reflection_result["success"]
     reflection_score = reflection_result["score"]
     
-    # 2. Active Gesture Challenge Check
-    expected_gesture = session.get("expected_gesture")
-    gesture_passed = liveness_detector.verify_gesture(frames, expected_gesture)
-    
-    # 3. Passive Moiré Check (CNN outputs)
-    moire_probs = [f["moire_prob"] for f in frames]
+    # 2. Passive Moiré Check (Max score of WebSocket CNN predictions)
+    moire_probs = session.get("moire_probs", [])
     max_moire_prob = max(moire_probs) if moire_probs else 0.0
-    moire_passed = max_moire_prob < 0.5  # Spoof if probability of screen is high
+    moire_passed = max_moire_prob < 0.5
     
-    # 4. Static Photo Motion Check
-    noses = np.array([f["landmarks"]["nose"] for f in frames])
-    nose_variance = np.var(noses, axis=0)
-    total_variance = float(np.sum(nose_variance))
-    motion_passed = total_variance > 1e-6
-    
-    # 5. Blink / Eye Aspect Ratio (EAR) check
-    ears = [f["ear"] for f in frames]
-    min_ear = min(ears)
-    blink_detected = min_ear < 0.22
+    expected_gesture = session.get("expected_gesture")
     
     # Combine verdict
     verdict = "VERIFIED_HUMAN"
@@ -290,8 +271,6 @@ async def verify_session(request: Request):
     session["completed"] = True
     session["verdict"] = verdict
     session["reason"] = reason
-    
-    # Save the updated session in Redis/InMemory cache
     session_store.save_session(session_id, session)
     
     return {
@@ -303,12 +282,12 @@ async def verify_session(request: Request):
             "reflection_passed": bool(reflection_passed),
             "max_moire_prob": float(max_moire_prob),
             "moire_passed": bool(moire_passed),
-            "nose_variance": float(total_variance),
+            "nose_variance": float(nose_variance),
             "motion_passed": bool(motion_passed),
             "blink_detected": bool(blink_detected),
             "gesture_passed": bool(gesture_passed),
             "expected_gesture": expected_gesture,
-            "ear_sequence": [float(e) for e in ears]
+            "ear_sequence": [float(e) for e in ear_sequence]
         }
     }
 

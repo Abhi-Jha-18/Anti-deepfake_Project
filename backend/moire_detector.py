@@ -247,6 +247,44 @@ class MoirePredictor:
         # Using max is safer for security than average, as moire might be stronger on forehead than cheeks
         return float(np.max(spoof_probs))
 
+    def predict_numpy_patches(self, patches_np):
+        """
+        Predicts whether face patches contain moire screen lines.
+        patches_np: List of numpy BGR images (64x64)
+        Returns: Max screen spoof probability (0.0 to 1.0)
+        """
+        if self.model is None:
+            self.load_model()
+            if self.model is None:
+                return 0.0
+                
+        spoof_probs = []
+        for img in patches_np:
+            try:
+                if img is None:
+                    continue
+                # Preprocess patch
+                img = cv2.resize(img, (64, 64))
+                img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+                pil_img = Image.fromarray(img_rgb)
+                tensor_img = self.transform(pil_img).unsqueeze(0).to(self.device)
+                
+                # Model inference
+                with torch.no_grad():
+                    outputs = self.model(tensor_img)
+                    probs = torch.softmax(outputs, dim=1)
+                    # Class 1 is screen spoof
+                    spoof_prob = float(probs[0][1].item())
+                    spoof_probs.append(spoof_prob)
+            except Exception as e:
+                print(f"Error predicting patch: {str(e)}")
+                continue
+                
+        if len(spoof_probs) == 0:
+            return 0.0
+            
+        return float(np.max(spoof_probs))
+
 if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()

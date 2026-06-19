@@ -231,13 +231,192 @@ async function startCamera() {
     }
 }
 
-// Simple loop to draw face placement guide overlay
+let faceLandmarker = null;
+let localFaceLandmarks = null;
+let lastVideoTime = -1;
+
+async function initFaceLandmarker() {
+    try {
+        log("Initializing local FaceLandmarker...", "info");
+        const visionModule = await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.8/vision_bundle.js");
+        const { FilesetResolver, FaceLandmarker: FL } = visionModule;
+        
+        const filesetResolver = await FilesetResolver.forVisionTasks(
+            "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.8/wasm"
+        );
+        
+        faceLandmarker = await FL.createFromOptions(filesetResolver, {
+            baseOptions: {
+                modelAssetPath: "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task",
+                delegate: "CPU"
+            },
+            runningMode: "VIDEO",
+            numFaces: 1
+        });
+        log("Local FaceLandmarker initialized successfully.", "success");
+    } catch (err) {
+        log(`Local FaceLandmarker loading failed: ${err.message}. Liveness checks may fall back or fail.`, "danger");
+        console.error(err);
+    }
+}
+
+function calculateEar(landmarks, eyeIndices, imgW, imgH) {
+    const coords = [];
+    for (const idx of eyeIndices) {
+        const lm = landmarks[idx];
+        coords.push([lm.x * imgW, lm.y * imgH]);
+    }
+    const v1 = Math.hypot(coords[1][0] - coords[5][0], coords[1][1] - coords[5][1]);
+    const v2 = Math.hypot(coords[2][0] - coords[4][0], coords[2][1] - coords[4][1]);
+    const h = Math.hypot(coords[0][0] - coords[3][0], coords[0][1] - coords[3][1]);
+    return (v1 + v2) / (2.0 * h + 1e-6);
+}
+
+function getPatchMeanColor(videoWidth, videoHeight, cx, cy, patchSize) {
+    const x1 = Math.max(0, Math.floor(cx - patchSize / 2));
+    const y1 = Math.max(0, Math.floor(cy - patchSize / 2));
+    const x2 = Math.min(videoWidth, Math.floor(cx + patchSize / 2));
+    const y2 = Math.min(videoHeight, Math.floor(cy + patchSize / 2));
+    const w = x2 - x1;
+    const h = y2 - y1;
+    if (w <= 0 || h <= 0) return [0, 0, 0];
+    
+    // Draw current frame to hidden capture canvas first
+    captureCtx.drawImage(videoEl, 0, 0, captureCanvas.width, captureCanvas.height);
+    const imgData = captureCtx.getImageData(x1, y1, w, h);
+    const data = imgData.data;
+    let rSum = 0, gSum = 0, bSum = 0, count = 0;
+    for (let i = 0; i < data.length; i += 4) {
+        rSum += data[i];
+        gSum += data[i+1];
+        bSum += data[i+2];
+        count++;
+    }
+    return [rSum / count, gSum / count, bSum / count];
+}
+
+function cropAndCombinePatches(landmarks, videoW, videoH) {
+    const patchW = 64;
+    const patchH = 64;
+    
+    const patchCanvas = document.createElement('canvas');
+    patchCanvas.width = 192;
+    patchCanvas.height = 64;
+    const patchCtx = patchCanvas.getContext('2d');
+    
+    // Forehead: 10, Left cheek: 117, Right cheek: 346
+    const patchLms = [landmarks[10], landmarks[117], landmarks[346]];
+    
+    // Draw current frame to hidden capture canvas first
+    captureCtx.drawImage(videoEl, 0, 0, captureCanvas.width, captureCanvas.height);
+    
+    for (let i = 0; i < patchLms.length; i++) {
+        const lm = patchLms[i];
+        const cx = lm.x * videoW;
+        const cy = lm.y * videoH;
+        
+        const x1 = Math.max(0, Math.floor(cx - patchW / 2));
+        const y1 = Math.max(0, Math.floor(cy - patchH / 2));
+        
+        patchCtx.drawImage(
+            captureCanvas, 
+            x1, y1, patchW, patchH,
+            i * 64, 0, patchW, patchH
+        );
+    }
+    
+    return new Promise((resolve) => {
+        patchCanvas.toBlob((blob) => {
+            resolve(blob);
+        }, 'image/jpeg', 0.85);
+    });
+}
+
+function calculateNoseVariance(coordsList) {
+    if (coordsList.length === 0) return 0;
+    const n = coordsList.length;
+    let sumX = 0, sumY = 0, sumZ = 0;
+    for (const c of coordsList) {
+        sumX += c[0];
+        sumY += c[1];
+        sumZ += c[2];
+    }
+    const meanX = sumX / n;
+    const meanY = sumY / n;
+    const meanZ = sumZ / n;
+    
+    let varX = 0, varY = 0, varZ = 0;
+    for (const c of coordsList) {
+        varX += Math.pow(c[0] - meanX, 2);
+        varY += Math.pow(c[1] - meanY, 2);
+        varZ += Math.pow(c[2] - meanZ, 2);
+    }
+    
+    return (varX + varY + varZ) / n;
+}
+
+// FaceLandmarker video loop
 function drawOverlayLoop() {
     if (!videoEl.paused && !videoEl.ended) {
         ctxOverlay.clearRect(0, 0, canvasOverlay.width, canvasOverlay.height);
         
-        // Compute FPS if needed
+        // Draw 30 FPS indicator
         document.getElementById('camera-fps').textContent = '30 FPS';
+        
+        if (faceLandmarker && videoEl.currentTime !== lastVideoTime) {
+            lastVideoTime = videoEl.currentTime;
+            const results = faceLandmarker.detectForVideo(videoEl, performance.now());
+            
+            if (results && results.faceLandmarks && results.faceLandmarks.length > 0) {
+                localFaceLandmarks = results.faceLandmarks[0];
+                
+                const leftIrisLm = localFaceLandmarks[468];
+                const rightIrisLm = localFaceLandmarks[473];
+                
+                const leftEye = [33, 160, 158, 133, 153, 144];
+                const rightEye = [362, 385, 387, 263, 373, 380];
+                const currentEar = (calculateEar(localFaceLandmarks, leftEye, canvasOverlay.width, canvasOverlay.height) + 
+                                   calculateEar(localFaceLandmarks, rightEye, canvasOverlay.width, canvasOverlay.height)) / 2.0;
+                
+                if (leftIrisLm && rightIrisLm) {
+                    drawEyeTargets(
+                        [leftIrisLm.x * canvasOverlay.width, leftIrisLm.y * canvasOverlay.height],
+                        [rightIrisLm.x * canvasOverlay.width, rightIrisLm.y * canvasOverlay.height],
+                        currentEar
+                    );
+                }
+                
+                kpiEarVal.textContent = currentEar.toFixed(2);
+                if (currentEar < 0.22) {
+                    kpiBlinkBadge.className = 'ear-status-badge blink';
+                    kpiBlinkBadge.textContent = 'BLINK DETECTED!';
+                } else {
+                    kpiBlinkBadge.className = 'ear-status-badge';
+                    kpiBlinkBadge.textContent = 'EYES DETECTED';
+                }
+                
+                const nose = localFaceLandmarks[1];
+                if (nose && nose.x > 0.3 && nose.x < 0.7 && nose.y > 0.3 && nose.y < 0.7) {
+                    faceGuide.className = 'face-guide-oval detected';
+                    if (!isChecking) {
+                        guideInstruction.textContent = 'FACE POSITION OPTIMAL';
+                    }
+                } else {
+                    faceGuide.className = 'face-guide-oval';
+                    if (!isChecking) {
+                        guideInstruction.textContent = 'ALIGN FACE WITH OVAL';
+                    }
+                }
+            } else {
+                localFaceLandmarks = null;
+                faceGuide.className = 'face-guide-oval';
+                if (!isChecking) {
+                    guideInstruction.textContent = 'ALIGN FACE WITH OVAL';
+                }
+                kpiBlinkBadge.className = 'ear-status-badge';
+                kpiBlinkBadge.textContent = 'NO FACE DETECTED';
+            }
+        }
         
         requestAnimationFrame(drawOverlayLoop);
     }
@@ -356,6 +535,12 @@ function sendFrameAndWait(expectedColor, blob) {
 async function runLivenessCheck() {
     if (isChecking || !isConnected) return;
     
+    // Ensure FaceLandmarker is initialized
+    if (!faceLandmarker) {
+        log("Local FaceLandmarker is not initialized. Please wait or reload.", "danger");
+        return;
+    }
+    
     isChecking = true;
     btnStart.disabled = true;
     btnTrain.disabled = true;
@@ -403,6 +588,13 @@ async function runLivenessCheck() {
         let maxMoire = 0;
         let firstFrameB64 = null;
         
+        // Local liveness variables
+        let blinkDetected = false;
+        const noseCoordinatesList = [];
+        const baselineYawRatios = [];
+        const reflectionData = [];
+        const earSequence = [];
+        
         // Step 2: Loop and flash each color in sequence
         for (let i = 0; i < colorSequence.length; i++) {
             const color = colorSequence[i];
@@ -421,29 +613,76 @@ async function runLivenessCheck() {
             // Wait 350ms to allow screen light to reach face and webcam to adjust exposure
             await sleep(350);
             
-            // Capture image blob & base64 (base64 only for receipt template)
-            const frameBlob = await captureFrameBlob();
+            // Ensure face is still tracked
+            if (!localFaceLandmarks) {
+                flashOverlay.classList.remove('active');
+                throw new Error("Face connection lost. Please keep your face inside the guide oval.");
+            }
+            
+            // Capture image base64 for receipt template
             if (i === 0) {
                 firstFrameB64 = captureFrameBase64();
             }
             
+            // Collect frame metrics locally
+            const noseLm = localFaceLandmarks[1];
+            if (noseLm) {
+                noseCoordinatesList.push([noseLm.x, noseLm.y, noseLm.z]);
+            }
+            
+            const leftEdge = localFaceLandmarks[234];
+            const rightEdge = localFaceLandmarks[454];
+            const yawWidth = rightEdge && leftEdge ? rightEdge.x - leftEdge.x : 0;
+            const yawRatio = yawWidth > 0 && noseLm ? (noseLm.x - leftEdge.x) / yawWidth : 0.5;
+            baselineYawRatios.push(yawRatio);
+            
+            const leftEye = [33, 160, 158, 133, 153, 144];
+            const rightEye = [362, 385, 387, 263, 373, 380];
+            const earVal = (calculateEar(localFaceLandmarks, leftEye, canvasOverlay.width, canvasOverlay.height) + 
+                            calculateEar(localFaceLandmarks, rightEye, canvasOverlay.width, canvasOverlay.height)) / 2.0;
+            earSequence.push(earVal);
+            if (earVal < 0.22) {
+                blinkDetected = true;
+            }
+            
+            const foreheadRGB = getPatchMeanColor(videoEl.videoWidth, videoEl.videoHeight, localFaceLandmarks[10].x * videoEl.videoWidth, localFaceLandmarks[10].y * videoEl.videoHeight, 16);
+            const leftCheekRGB = getPatchMeanColor(videoEl.videoWidth, videoEl.videoHeight, localFaceLandmarks[117].x * videoEl.videoWidth, localFaceLandmarks[117].y * videoEl.videoHeight, 16);
+            const rightCheekRGB = getPatchMeanColor(videoEl.videoWidth, videoEl.videoHeight, localFaceLandmarks[346].x * videoEl.videoWidth, localFaceLandmarks[346].y * videoEl.videoHeight, 16);
+            const avgSkinRGB = [
+                (foreheadRGB[0] + leftCheekRGB[0] + rightCheekRGB[0]) / 3.0,
+                (foreheadRGB[1] + leftCheekRGB[1] + rightCheekRGB[1]) / 3.0,
+                (foreheadRGB[2] + leftCheekRGB[2] + rightCheekRGB[2]) / 3.0
+            ];
+            
+            const leftIrisRGB = getPatchMeanColor(videoEl.videoWidth, videoEl.videoHeight, localFaceLandmarks[468].x * videoEl.videoWidth, localFaceLandmarks[468].y * videoEl.videoHeight, 8);
+            const rightIrisRGB = getPatchMeanColor(videoEl.videoWidth, videoEl.videoHeight, localFaceLandmarks[473].x * videoEl.videoWidth, localFaceLandmarks[473].y * videoEl.videoHeight, 8);
+            const avgEyeRGB = [
+                (leftIrisRGB[0] + rightIrisRGB[0]) / 2.0,
+                (leftIrisRGB[1] + rightIrisRGB[1]) / 2.0,
+                (leftIrisRGB[2] + rightIrisRGB[2]) / 2.0
+            ];
+            
+            reflectionData.push({
+                expected_color: color,
+                eye_rgb: avgEyeRGB,
+                skin_rgb: avgSkinRGB
+            });
+            
+            // Crop and combine patches
+            const patchBlob = await cropAndCombinePatches(localFaceLandmarks, videoEl.videoWidth, videoEl.videoHeight);
+            
             // Turn off overlay immediately
             flashOverlay.classList.remove('active');
             
-            // Send binary frame to API over WebSocket
-            log(`Submitting binary frame ${i + 1} to WebSocket...`, 'muted');
-            const verifyData = await sendFrameAndWait(color, frameBlob);
+            // Send binary frame patches to API over WebSocket
+            log(`Submitting binary composite patch ${i + 1} to WebSocket...`, 'muted');
+            const verifyData = await sendFrameAndWait(color, patchBlob);
             
             if (!verifyData.success) {
                 log(`Analysis failed at step ${i + 1}: ${verifyData.error}`, 'danger');
                 statusMessage.textContent = 'Verification Interrupted';
                 showFailureVerdict('LANDMARKING_FAILED', verifyData.error);
                 return;
-            }
-            
-            // Draw detected eye centers
-            if (verifyData.left_iris && verifyData.right_iris) {
-                drawEyeTargets(verifyData.left_iris, verifyData.right_iris, verifyData.ear);
             }
             
             // Update live metrics on dashboard
@@ -476,15 +715,42 @@ async function runLivenessCheck() {
             // Wait 1.8 seconds for user head movement
             await sleep(1800);
             
-            // Capture gesture frame blob
-            const gestureBlob = await captureFrameBlob();
+            // Ensure face is still tracked
+            if (!localFaceLandmarks) {
+                gesturePrompt.classList.remove('active');
+                throw new Error("Face connection lost. Please keep your face inside the guide oval.");
+            }
+            
+            // Collect gesture metrics locally
+            const noseLm = localFaceLandmarks[1];
+            if (noseLm) {
+                noseCoordinatesList.push([noseLm.x, noseLm.y, noseLm.z]);
+            }
+            const leftEdge = localFaceLandmarks[234];
+            const rightEdge = localFaceLandmarks[454];
+            const yawWidth = rightEdge && leftEdge ? rightEdge.x - leftEdge.x : 0;
+            const gestureYawRatio = yawWidth > 0 && noseLm ? (noseLm.x - leftEdge.x) / yawWidth : 0.5;
+            
+            // Evaluate head yaw ratio locally
+            const avgBaselineYaw = baselineYawRatios.reduce((a, b) => a + b, 0) / baselineYawRatios.length;
+            const diff = gestureYawRatio - avgBaselineYaw;
+            
+            let gesturePassed = false;
+            if (expectedGesture === 'TURN_LEFT') {
+                gesturePassed = diff > 0.06; // Mirrored webcam space: left turn shifts right (positive)
+            } else if (expectedGesture === 'TURN_RIGHT') {
+                gesturePassed = diff < -0.06; // right turn shifts left (negative)
+            }
+            
+            // Crop gesture frame patches
+            const gesturePatchBlob = await cropAndCombinePatches(localFaceLandmarks, videoEl.videoWidth, videoEl.videoHeight);
             
             // Hide gesture overlay UI
             gesturePrompt.classList.remove('active');
             
-            // Submit gesture frame to WebSocket
-            log(`Submitting binary gesture frame to WebSocket...`, 'muted');
-            const gestureData = await sendFrameAndWait('GESTURE', gestureBlob);
+            // Submit gesture frame to WebSocket for Moire score calculation
+            log(`Submitting binary gesture composite patch to WebSocket...`, 'muted');
+            const gestureData = await sendFrameAndWait('GESTURE', gesturePatchBlob);
             if (!gestureData.success) {
                 log(`Gesture analysis failed: ${gestureData.error}`, 'danger');
                 statusMessage.textContent = 'Verification Interrupted';
@@ -492,14 +758,26 @@ async function runLivenessCheck() {
                 return;
             }
             
+            // Calculate final nose variance locally
+            const totalVariance = calculateNoseVariance(noseCoordinatesList);
+            const motionPassed = totalVariance > 1e-6;
+            
             // Step 4: Final Session Verification (REST endpoint)
             statusMessage.textContent = 'Processing verdict...';
-            log('All challenge frames received. Requesting final liveness verdict...', 'info');
+            log('All challenge frames processed. Submitting liveness logs to REST API...', 'info');
             
             const sessionResponse = await fetch(`${API_URL}/verify_session`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ session_id: currentSessionId })
+                body: JSON.stringify({
+                    session_id: currentSessionId,
+                    motion_passed: motionPassed,
+                    gesture_passed: gesturePassed,
+                    blink_detected: blinkDetected,
+                    nose_variance: totalVariance,
+                    reflection_data: reflectionData,
+                    ear_sequence: earSequence
+                })
             });
             
             const sessionData = await sessionResponse.json();
@@ -1188,6 +1466,7 @@ if (btnHome) btnHome.addEventListener('click', goHome);
 // Auto-run checks on startup
 async function init() {
     await checkServerStatus();
+    await initFaceLandmarker();
 }
 
 window.addEventListener('DOMContentLoaded', init);
