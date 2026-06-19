@@ -904,17 +904,19 @@ function updateLiveMetrics(verifyData, color, stepIdx) {
         kpiMoireFill.style.background = 'linear-gradient(to right, #00f0ff, #00e676)';
     }
     
-    // 2. EAR / Blinks
-    const ear = verifyData.ear.toFixed(2);
-    kpiEarVal.textContent = ear;
-    
-    if (verifyData.ear < 0.22) {
-        kpiBlinkBadge.className = 'ear-status-badge blink';
-        kpiBlinkBadge.textContent = 'BLINK DETECTED!';
-        log('Landmark metrics: Eyebrow/Eyelid aspect ratio shows a blink event.', 'success');
-    } else {
-        kpiBlinkBadge.className = 'ear-status-badge';
-        kpiBlinkBadge.textContent = 'EYES DETECTED';
+    // 2. EAR / Blinks (handled real-time in local camera loop; fallback check here if provided)
+    if (verifyData.ear !== undefined && verifyData.ear !== null) {
+        const ear = verifyData.ear.toFixed(2);
+        kpiEarVal.textContent = ear;
+        
+        if (verifyData.ear < 0.22) {
+            kpiBlinkBadge.className = 'ear-status-badge blink';
+            kpiBlinkBadge.textContent = 'BLINK DETECTED!';
+            log('Landmark metrics: Eyebrow/Eyelid aspect ratio shows a blink event.', 'success');
+        } else {
+            kpiBlinkBadge.className = 'ear-status-badge';
+            kpiBlinkBadge.textContent = 'EYES DETECTED';
+        }
     }
     
     // 3. Highlight the reflection block with the color flashed
