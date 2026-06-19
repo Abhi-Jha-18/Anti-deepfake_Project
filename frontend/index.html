@@ -25,6 +25,7 @@
                 </div>
             </div>
             <div class="system-status">
+                <button class="btn-mute" id="btn-audio-toggle" title="Toggle Audio Assistant">🔊</button>
                 <span class="status-indicator" id="server-status-dot"></span>
                 <span id="server-status-text">Connecting to API...</span>
             </div>
@@ -55,6 +56,12 @@
                         <span class="guide-label" id="guide-instruction">POSITION YOUR FACE HERE</span>
                     </div>
                     
+                    <!-- Gesture prompt overlay -->
+                    <div class="gesture-prompt-overlay" id="gesture-prompt">
+                        <span class="gesture-arrow" id="gesture-arrow">←</span>
+                        <span class="gesture-text" id="gesture-text">TURN HEAD LEFT</span>
+                    </div>
+
                     <!-- Status Banner inside Camera -->
                     <div class="verification-status-banner" id="status-banner">
                         <span class="status-icon">🔒</span>
@@ -138,6 +145,9 @@
                 <div class="result-box glass-card" id="final-result-card">
                     <h3 id="result-title">Awaiting Verification</h3>
                     <p id="result-desc">Initiate the liveness test by clicking the button on the left. The system will flash a randomized color sequence to check active reflection.</p>
+                    <button class="btn btn-secondary btn-download" id="btn-download-receipt" style="display: none; margin-top: 10px; padding: 10px; width: 100%; font-size: 0.75rem;">
+                        📥 DOWNLOAD DIAGNOSTICS RECEIPT
+                    </button>
                 </div>
 
                 <!-- Terminal / Logging Output -->

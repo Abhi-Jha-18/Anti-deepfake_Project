@@ -665,3 +665,95 @@ body {
     from { opacity: 0; transform: translateY(4px); }
     to { opacity: 1; transform: translateY(0); }
 }
+
+/* Sound Toggle Button */
+.btn-mute {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    font-size: 1.1rem;
+    padding: 4px;
+    margin-right: 8px;
+    opacity: 0.6;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: var(--transition-smooth);
+}
+.btn-mute:hover {
+    opacity: 1;
+    transform: scale(1.1);
+}
+
+/* Gesture Challenge Overlay Banner */
+.gesture-prompt-overlay {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) scale(0.9);
+    background: rgba(7, 9, 19, 0.95);
+    border: 1px solid rgba(0, 240, 255, 0.2);
+    box-shadow: 0 0 35px rgba(0, 240, 255, 0.15), inset 0 0 15px rgba(0, 240, 255, 0.05);
+    border-radius: 12px;
+    padding: 20px 32px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    z-index: 10;
+    backdrop-filter: blur(15px);
+    opacity: 0;
+    pointer-events: none;
+    transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.gesture-prompt-overlay.active {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+}
+.gesture-arrow {
+    font-size: 2.5rem;
+    font-weight: 800;
+    color: var(--color-primary);
+    text-shadow: 0 0 15px var(--color-primary-glow);
+}
+.gesture-text {
+    font-size: 0.85rem;
+    font-weight: 800;
+    letter-spacing: 0.15em;
+    color: #ffffff;
+    text-transform: uppercase;
+    text-align: center;
+}
+
+/* Arrow bouncing animations for direction turn guide */
+.gesture-prompt-overlay.left .gesture-arrow {
+    animation: bounce-left 0.8s infinite alternate ease-in-out;
+}
+.gesture-prompt-overlay.right .gesture-arrow {
+    animation: bounce-right 0.8s infinite alternate ease-in-out;
+}
+
+@keyframes bounce-left {
+    from { transform: translateX(5px); }
+    to { transform: translateX(-10px); }
+}
+@keyframes bounce-right {
+    from { transform: translateX(-5px); }
+    to { transform: translateX(10px); }
+}
+
+/* Download Receipt Button overrides */
+.btn-download {
+    background: linear-gradient(135deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0.01)) !important;
+    border: 1px solid rgba(0, 240, 255, 0.15) !important;
+    color: var(--color-primary) !important;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+}
+.btn-download:hover {
+    background: rgba(0, 240, 255, 0.08) !important;
+    border-color: var(--color-primary) !important;
+    box-shadow: 0 0 15px rgba(0, 240, 255, 0.15);
+    transform: translateY(-1px);
+}
+

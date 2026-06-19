@@ -263,3 +263,58 @@ class LivenessDetector:
             }
         }
 
+    def verify_gesture(self, session_frames, expected_gesture):
+        """
+        Verifies if the face turned in the expected direction compared to baseline
+        (mirrored webcam coordinate shifts).
+        """
+        if len(session_frames) < 3:
+            return False
+            
+        # Baseline frames (user looking straight during the color flashes)
+        baseline_frames = [f for f in session_frames if f["expected_color"] != "GESTURE"]
+        gesture_frames = [f for f in session_frames if f["expected_color"] == "GESTURE"]
+        
+        if not baseline_frames or not gesture_frames:
+            return False
+            
+        gesture_frame = gesture_frames[-1]
+        
+        # Calculate average baseline nose x-ratio
+        baseline_ratios = []
+        for f in baseline_frames:
+            nose = f["landmarks"]["nose"]
+            left = f["landmarks"]["left_edge"]
+            right = f["landmarks"]["right_edge"]
+            width = right[0] - left[0]
+            if width > 0:
+                baseline_ratios.append((nose[0] - left[0]) / width)
+                
+        if not baseline_ratios:
+            return False
+        avg_baseline = np.mean(baseline_ratios)
+        
+        # Gesture frame nose x-ratio
+        g_nose = gesture_frame["landmarks"]["nose"]
+        g_left = gesture_frame["landmarks"]["left_edge"]
+        g_right = gesture_frame["landmarks"]["right_edge"]
+        g_width = g_right[0] - g_left[0]
+        if g_width <= 0:
+            return False
+        g_ratio = (g_nose[0] - g_left[0]) / g_width
+        
+        diff = g_ratio - avg_baseline
+        print(f"[GESTURE] Expected: {expected_gesture} | Baseline: {avg_baseline:.3f} | Gesture: {g_ratio:.3f} | Diff: {diff:.3f}")
+        
+        # In mirrored webcam space:
+        # - User turns head left -> nose shifts right (positive diff on screen)
+        # - User turns head right -> nose shifts left (negative diff on screen)
+        # We require at least an 8% shift relative to face width to confirm movement
+        if expected_gesture == "TURN_LEFT":
+            return diff > 0.06
+        elif expected_gesture == "TURN_RIGHT":
+            return diff < -0.06
+            
+        return False
+
+

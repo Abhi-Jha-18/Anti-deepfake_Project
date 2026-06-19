@@ -37,8 +37,11 @@ def init_session():
         sequence.append(chosen)
         last_color = chosen
         
+    gesture = str(np.random.choice(['TURN_LEFT', 'TURN_RIGHT']))
+    
     sessions[session_id] = {
         "sequence": sequence,
+        "expected_gesture": gesture,
         "frames": [],
         "completed": False
     }
@@ -46,7 +49,8 @@ def init_session():
     return jsonify({
         "success": True,
         "session_id": session_id,
-        "sequence": sequence
+        "sequence": sequence,
+        "gesture": gesture
     })
 
 @app.route('/api/verify_frame', methods=['POST'])
@@ -112,38 +116,38 @@ def verify_session():
     frames = session["frames"]
     sequence = session["sequence"]
     
-    if len(frames) < len(sequence):
+    expected_frames_count = len(sequence) + 1
+    if len(frames) < expected_frames_count:
         return jsonify({
             "success": False,
-            "error": f"Incomplete verification. Only {len(frames)} out of {len(sequence)} steps completed."
+            "error": f"Incomplete verification. Only {len(frames)} out of {expected_frames_count} steps completed."
         })
         
-    # 1. Challenge-Response Reflection Check
-    reflection_result = liveness_detector.verify_reflection_sequence(frames)
+    # 1. Challenge-Response Reflection Check (evaluated only on flash frames)
+    flash_frames = [f for f in frames if f["expected_color"] != "GESTURE"]
+    reflection_result = liveness_detector.verify_reflection_sequence(flash_frames)
     reflection_passed = reflection_result["success"]
     reflection_score = reflection_result["score"]
     
-    # 2. Passive Moiré Check (CNN outputs)
+    # 2. Active Gesture Challenge Check
+    expected_gesture = session.get("expected_gesture")
+    gesture_passed = liveness_detector.verify_gesture(frames, expected_gesture)
+    
+    # 3. Passive Moiré Check (CNN outputs)
     moire_probs = [f["moire_prob"] for f in frames]
     max_moire_prob = max(moire_probs) if moire_probs else 0.0
     moire_passed = max_moire_prob < 0.5  # Spoof if probability of screen is high
     
-    # 3. Static Photo Motion Check
-    # Verify the face had minor movement (printed photos held up are extremely static or have unnatural motion)
-    # Check variance of the nose landmark (landmark[1])
+    # 4. Static Photo Motion Check
     noses = np.array([f["landmarks"]["nose"] for f in frames]) # Shape: N x 3 (x, y, z)
     nose_variance = np.var(noses, axis=0) # Variance in x, y, z
     total_variance = float(np.sum(nose_variance))
     
-    # A genuine human face in front of a webcam has micro-movements, causing a small non-zero variance.
-    # A completely static printed photo on a stand/clip has 0 variance.
-    # An attacker holding a printed photo by hand has some drift, but it's typically very low.
-    # We define a micro-movement threshold. If total variance is lower than 1e-8, it's considered a static spoof.
-    motion_passed = total_variance > 1e-8
+    # With a head turn gesture, a real face MUST register significant movement.
+    # We raise the movement threshold slightly to 1e-6.
+    motion_passed = total_variance > 1e-6
     
-    # 4. Blink / Eye Aspect Ratio (EAR) check
-    # In a 4-frame session, the user might not blink, but we can log the EAR.
-    # If the variance of EAR is high, or if we see a clear blink (EAR < 0.20), it's a good positive indicator of life.
+    # 5. Blink / Eye Aspect Ratio (EAR) check
     ears = [f["ear"] for f in frames]
     min_ear = min(ears)
     blink_detected = min_ear < 0.22
@@ -155,6 +159,9 @@ def verify_session():
     if not motion_passed:
         verdict = "SPOOF_DETECTED"
         reason = "Static Spoof Detected (No facial micro-movements)."
+    elif not gesture_passed:
+        verdict = "SPOOF_DETECTED"
+        reason = f"Gesture Spoof Detected (Incorrect or missing head movement. Expected: {expected_gesture})."
     elif not reflection_passed:
         verdict = "SPOOF_DETECTED"
         reason = f"Reflection Spoof Detected (Color reflections did not match flash challenge sequence. Match Rate: {reflection_score*100:.1f}%)."
@@ -178,6 +185,8 @@ def verify_session():
             "nose_variance": float(total_variance),
             "motion_passed": bool(motion_passed),
             "blink_detected": bool(blink_detected),
+            "gesture_passed": bool(gesture_passed),
+            "expected_gesture": expected_gesture,
             "ear_sequence": [float(e) for e in ears]
         }
     })
