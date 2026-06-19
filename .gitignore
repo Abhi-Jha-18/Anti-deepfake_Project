@@ -1,0 +1,17 @@
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Datasets (8000+ synthetic image files)
+backend/dataset/
+
+# MediaPipe models
+backend/face_landmarker.task
+
+# IDE / System files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

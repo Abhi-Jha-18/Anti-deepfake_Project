@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Anti-Deepfake KYC Verification Guard</title>
+    <!-- Google Fonts: Outfit for UI, JetBrains Mono for Code/Logs -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,300;0,400;1,300&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Full-screen Color Flashing Overlay for Active Challenge -->
+    <div id="flash-overlay" class="flash-overlay"></div>
+
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="logo-area">
+                <div class="logo-icon"></div>
+                <div class="logo-text">
+                    <h1>AETHER_SHIELD</h1>
+                    <p>Anti-Deepfake KYC Verification Guard</p>
+                </div>
+            </div>
+            <div class="system-status">
+                <span class="status-indicator" id="server-status-dot"></span>
+                <span id="server-status-text">Connecting to API...</span>
+            </div>
+        </header>
+
+        <!-- Main Body Grid -->
+        <main class="app-grid">
+            
+            <!-- Left Panel: Camera Stream Viewport -->
+            <section class="viewport-panel glass-panel">
+                <div class="panel-header">
+                    <span class="panel-title">SECURE WEB-CAM FEED</span>
+                    <span class="badge" id="camera-fps">00 FPS</span>
+                </div>
+                
+                <div class="camera-wrapper">
+                    <!-- The active webcam element -->
+                    <video id="webcam" autoplay playsinline muted></video>
+                    <!-- Overlay canvas for landmarks rendering -->
+                    <canvas id="canvas-overlay"></canvas>
+                    
+                    <!-- Guide Oval for Face Placement -->
+                    <div class="face-guide-oval" id="face-guide">
+                        <div class="guide-corner tl"></div>
+                        <div class="guide-corner tr"></div>
+                        <div class="guide-corner bl"></div>
+                        <div class="guide-corner br"></div>
+                        <span class="guide-label" id="guide-instruction">POSITION YOUR FACE HERE</span>
+                    </div>
+                    
+                    <!-- Status Banner inside Camera -->
+                    <div class="verification-status-banner" id="status-banner">
+                        <span class="status-icon">🔒</span>
+                        <span class="status-msg" id="status-message">Ready to Start</span>
+                    </div>
+                </div>
+
+                <div class="controls-row">
+                    <button class="btn btn-primary" id="btn-start">
+                        <span class="btn-glow"></span>
+                        START LIVENESS CHECK
+                    </button>
+                    <button class="btn btn-secondary" id="btn-train">
+                        TRAIN MOIRE CNN
+                    </button>
+                </div>
+            </section>
+
+            <!-- Right Panel: Diagnostics and Metrics Dashboard -->
+            <section class="dashboard-panel glass-panel">
+                <div class="panel-header">
+                    <span class="panel-title">LIVENESS DIAGNOSTICS</span>
+                    <span class="badge badge-success" id="overall-badge">IDLE</span>
+                </div>
+
+                <!-- KPI Meters Grid -->
+                <div class="kpi-grid">
+                    <!-- Moiré Pattern Detection (CNN Output) -->
+                    <div class="kpi-card glass-card">
+                        <div class="kpi-meta">
+                            <span class="kpi-title">Moiré Pattern (CNN Score)</span>
+                            <span class="kpi-value" id="kpi-moire-val">0%</span>
+                        </div>
+                        <div class="kpi-progress-bar">
+                            <div class="progress-fill" id="kpi-moire-fill" style="width: 0%;"></div>
+                        </div>
+                        <p class="kpi-desc">Probability of digital screen reproduction</p>
+                    </div>
+
+                    <!-- Challenge Reflection Color Match -->
+                    <div class="kpi-card glass-card">
+                        <div class="kpi-meta">
+                            <span class="kpi-title">Challenge Color Reflections</span>
+                            <span class="kpi-value" id="kpi-reflection-val">N/A</span>
+                        </div>
+                        
+                        <!-- Reflection Sequence Visual Blocks -->
+                        <div class="reflection-sequence-blocks" id="reflection-blocks">
+                            <div class="color-block pending"></div>
+                            <div class="color-block pending"></div>
+                            <div class="color-block pending"></div>
+                            <div class="color-block pending"></div>
+                        </div>
+                        <p class="kpi-desc">Synchronized eye/skin color reflections</p>
+                    </div>
+
+                    <!-- Eye Aspect Ratio (EAR) / Blink Tracker -->
+                    <div class="kpi-card glass-card">
+                        <div class="kpi-meta">
+                            <span class="kpi-title">Eye Aspect Ratio (EAR)</span>
+                            <span class="kpi-value" id="kpi-ear-val">0.00</span>
+                        </div>
+                        <div class="ear-status-badge" id="kpi-blink-badge">EYES DETECTED</div>
+                        <p class="kpi-desc">Blink tracking for static photo prevention</p>
+                    </div>
+
+                    <!-- Motion / Landark Jitter Variance -->
+                    <div class="kpi-card glass-card">
+                        <div class="kpi-meta">
+                            <span class="kpi-title">Face Motion Variance</span>
+                            <span class="kpi-value" id="kpi-motion-val">0.00</span>
+                        </div>
+                        <div class="kpi-progress-bar">
+                            <div class="progress-fill var-fill" id="kpi-motion-fill" style="width: 0%;"></div>
+                        </div>
+                        <p class="kpi-desc">Micro-movements to detect print spoofing</p>
+                    </div>
+                </div>
+
+                <!-- Final Verification Result Panel -->
+                <div class="result-box glass-card" id="final-result-card">
+                    <h3 id="result-title">Awaiting Verification</h3>
+                    <p id="result-desc">Initiate the liveness test by clicking the button on the left. The system will flash a randomized color sequence to check active reflection.</p>
+                </div>
+
+                <!-- Terminal / Logging Output -->
+                <div class="terminal-log glass-card">
+                    <div class="terminal-header">
+                        <span>SYSTEM_LOG</span>
+                        <span class="pulse-dot"></span>
+                    </div>
+                    <div class="terminal-body" id="log-output">
+                        <p class="log-line text-muted">[SYSTEM] Ready to initialize secure telemetry...</p>
+                    </div>
+                </div>
+            </section>
+            
+        </main>
+        
+        <!-- Footer -->
+        <footer class="app-footer">
+            <p>&copy; 2026 AETHER_SHIELD. Protected by active challenge-response and deep learning guards.</p>
+        </footer>
+    </div>
+
+    <!-- Hidden image element for canvas capture -->
+    <canvas id="hidden-capture-canvas" style="display: none;"></canvas>
+
+    <script src="app.js"></script>
+</body>
+</html>
