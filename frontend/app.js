@@ -23,6 +23,14 @@ const gestureArrow = document.getElementById('gesture-arrow');
 const gestureText = document.getElementById('gesture-text');
 const btnDownloadReceipt = document.getElementById('btn-download-receipt');
 
+// Landing DOM elements
+const btnLaunchScanner = document.getElementById('btn-launch-scanner');
+const btnHome = document.getElementById('btn-home');
+const landingStatusDot = document.getElementById('landing-server-status-dot');
+const landingStatusText = document.getElementById('landing-server-status-text');
+const landingView = document.getElementById('landing-view');
+const scannerView = document.getElementById('scanner-view');
+
 // KPI metrics elements
 const kpiMoireVal = document.getElementById('kpi-moire-val');
 const kpiMoireFill = document.getElementById('kpi-moire-fill');
@@ -171,19 +179,24 @@ async function checkServerStatus() {
         if (data.success) {
             isConnected = true;
             serverStatusDot.className = 'status-indicator connected';
+            if (landingStatusDot) landingStatusDot.className = 'status-indicator connected';
             
             if (data.model_trained) {
                 serverStatusText.textContent = 'API Ready (CNN Trained)';
+                if (landingStatusText) landingStatusText.textContent = 'API READY (CNN)';
                 log('API connection verified. Moire CNN model loaded.', 'success');
             } else {
                 serverStatusText.textContent = 'API Ready (No CNN Model)';
+                if (landingStatusText) landingStatusText.textContent = 'API READY (NO WEIGHTS)';
                 log('API connection verified. Moire CNN weights not found; running in fallback mode.', 'warn');
             }
         }
     } catch (error) {
         isConnected = false;
         serverStatusDot.className = 'status-indicator';
+        if (landingStatusDot) landingStatusDot.className = 'status-indicator';
         serverStatusText.textContent = 'API Offline';
+        if (landingStatusText) landingStatusText.textContent = 'API OFFLINE';
         log('Could not connect to API server. Ensure backend/app.py is running on port 5000.', 'danger');
     }
 }
@@ -1039,6 +1052,58 @@ function downloadReceipt() {
 }
 
 /* ==========================================================================
+   View Transitions & Camera Control
+   ========================================================================== */
+async function launchScanner() {
+    playSynthSound('scan');
+    speak("Welcome to Aether Shield. Camera stream initializing. Please position your face.");
+    
+    landingView.classList.add('fade-out-up');
+    await sleep(350);
+    
+    landingView.classList.add('hidden');
+    landingView.classList.remove('fade-out-up');
+    
+    scannerView.classList.remove('hidden');
+    scannerView.classList.add('fade-in-down');
+    await sleep(350);
+    
+    scannerView.classList.remove('fade-in-down');
+    
+    // Launch webcam stream
+    await startCamera();
+}
+
+async function goHome() {
+    speak("Returning to home screen.");
+    
+    // Stop camera stream to release device resources
+    if (stream) {
+        stream.getTracks().forEach(track => track.stop());
+        stream = null;
+    }
+    videoEl.srcObject = null;
+    ctxOverlay.clearRect(0, 0, canvasOverlay.width, canvasOverlay.height);
+    
+    scannerView.classList.add('fade-out-up');
+    await sleep(350);
+    
+    scannerView.classList.add('hidden');
+    scannerView.classList.remove('fade-out-up');
+    
+    landingView.classList.remove('hidden');
+    landingView.classList.add('fade-in-down');
+    await sleep(350);
+    
+    landingView.classList.remove('fade-in-down');
+    
+    // Reset scanner state
+    resetDiagnosticsUI();
+    btnDownloadReceipt.style.display = 'none';
+    statusMessage.textContent = 'Ready to Start';
+}
+
+/* ==========================================================================
    Event Listeners & Initialization
    ========================================================================== */
 btnStart.addEventListener('click', runLivenessCheck);
@@ -1050,10 +1115,13 @@ btnAudioToggle.addEventListener('click', () => {
 });
 btnDownloadReceipt.addEventListener('click', downloadReceipt);
 
+// Landing page listeners
+if (btnLaunchScanner) btnLaunchScanner.addEventListener('click', launchScanner);
+if (btnHome) btnHome.addEventListener('click', goHome);
+
 // Auto-run checks on startup
 async function init() {
     await checkServerStatus();
-    await startCamera();
 }
 
 window.addEventListener('DOMContentLoaded', init);

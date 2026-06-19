@@ -15,159 +15,234 @@
     <div id="flash-overlay" class="flash-overlay"></div>
 
     <div class="app-container">
-        <!-- Header -->
-        <header class="app-header">
-            <div class="logo-area">
-                <div class="logo-icon"></div>
-                <div class="logo-text">
-                    <h1>AETHER_SHIELD</h1>
-                    <p>Anti-Deepfake KYC Verification Guard</p>
-                </div>
-            </div>
-            <div class="system-status">
-                <button class="btn-mute" id="btn-audio-toggle" title="Toggle Audio Assistant">🔊</button>
-                <span class="status-indicator" id="server-status-dot"></span>
-                <span id="server-status-text">Connecting to API...</span>
-            </div>
-        </header>
-
-        <!-- Main Body Grid -->
-        <main class="app-grid">
-            
-            <!-- Left Panel: Camera Stream Viewport -->
-            <section class="viewport-panel glass-panel">
-                <div class="panel-header">
-                    <span class="panel-title">SECURE WEB-CAM FEED</span>
-                    <span class="badge" id="camera-fps">00 FPS</span>
-                </div>
-                
-                <div class="camera-wrapper">
-                    <!-- The active webcam element -->
-                    <video id="webcam" autoplay playsinline muted></video>
-                    <!-- Overlay canvas for landmarks rendering -->
-                    <canvas id="canvas-overlay"></canvas>
-                    
-                    <!-- Guide Oval for Face Placement -->
-                    <div class="face-guide-oval" id="face-guide">
-                        <div class="guide-corner tl"></div>
-                        <div class="guide-corner tr"></div>
-                        <div class="guide-corner bl"></div>
-                        <div class="guide-corner br"></div>
-                        <span class="guide-label" id="guide-instruction">POSITION YOUR FACE HERE</span>
-                    </div>
-                    
-                    <!-- Gesture prompt overlay -->
-                    <div class="gesture-prompt-overlay" id="gesture-prompt">
-                        <span class="gesture-arrow" id="gesture-arrow">←</span>
-                        <span class="gesture-text" id="gesture-text">TURN HEAD LEFT</span>
-                    </div>
-
-                    <!-- Status Banner inside Camera -->
-                    <div class="verification-status-banner" id="status-banner">
-                        <span class="status-icon">🔒</span>
-                        <span class="status-msg" id="status-message">Ready to Start</span>
+        <!-- Landing Page View -->
+        <div id="landing-view" class="landing-container">
+            <!-- Landing Navigation -->
+            <nav class="landing-nav">
+                <div class="logo-area">
+                    <div class="logo-icon"></div>
+                    <div class="logo-text">
+                        <h1>AETHER_SHIELD</h1>
+                        <p>Biometric Guard</p>
                     </div>
                 </div>
+                <div class="nav-status-group">
+                    <a href="#tech-specs" class="nav-link">SYSTEM_SPECS</a>
+                    <div class="system-status">
+                        <span class="status-indicator" id="landing-server-status-dot"></span>
+                        <span id="landing-server-status-text">Connecting...</span>
+                    </div>
+                </div>
+            </nav>
 
-                <div class="controls-row">
-                    <button class="btn btn-primary" id="btn-start">
+            <!-- Hero Section -->
+            <div class="hero-section">
+                <div class="hero-badge">SECURE HANDSHAKE v2.4</div>
+                <h2 class="hero-title">NEXT-GEN BIOMETRIC<br><span class="gradient-text">ANTI-DEEPFAKE</span> SHIELD</h2>
+                <p class="hero-subtitle">Secure your KYC onboarding process using scale-invariant active reflection challenges, live convolutional neural networks, and micro-motion trackers.</p>
+                <div class="hero-ctas">
+                    <button class="btn btn-primary btn-hero" id="btn-launch-scanner">
                         <span class="btn-glow"></span>
-                        START LIVENESS CHECK
+                        LAUNCH VERIFICATION SCANNER
                     </button>
-                    <button class="btn btn-secondary" id="btn-train">
-                        TRAIN MOIRE CNN
-                    </button>
+                    <a href="#tech-specs" class="btn btn-secondary btn-hero">TECHNICAL SPECIFICATIONS</a>
                 </div>
-            </section>
+            </div>
 
-            <!-- Right Panel: Diagnostics and Metrics Dashboard -->
-            <section class="dashboard-panel glass-panel">
-                <div class="panel-header">
-                    <span class="panel-title">LIVENESS DIAGNOSTICS</span>
-                    <span class="badge badge-success" id="overall-badge">IDLE</span>
-                </div>
-
-                <!-- KPI Meters Grid -->
-                <div class="kpi-grid">
-                    <!-- Moiré Pattern Detection (CNN Output) -->
-                    <div class="kpi-card glass-card">
-                        <div class="kpi-meta">
-                            <span class="kpi-title">Moiré Pattern (CNN Score)</span>
-                            <span class="kpi-value" id="kpi-moire-val">0%</span>
-                        </div>
-                        <div class="kpi-progress-bar">
-                            <div class="progress-fill" id="kpi-moire-fill" style="width: 0%;"></div>
-                        </div>
-                        <p class="kpi-desc">Probability of digital screen reproduction</p>
+            <!-- Features / Tech Specs Section -->
+            <div id="tech-specs" class="features-section">
+                <h3 class="section-heading">SECURITY INFRASTRUCTURE</h3>
+                <div class="features-grid">
+                    <!-- Feature 1: Moiré CNN -->
+                    <div class="feature-card glass-card">
+                        <div class="feature-icon cnn-icon">🛡️</div>
+                        <h4>Moiré CNN Analyser</h4>
+                        <p>Analyses skin patches using deep CNN layers to detect micro-frequency lines and screen rasterizations common in replay attacks.</p>
                     </div>
+                    <!-- Feature 2: Active Reflections -->
+                    <div class="feature-card glass-card">
+                        <div class="feature-icon reflection-icon">✨</div>
+                        <h4>Active Challenge Flash</h4>
+                        <p>Flashes a randomized color sequence to check synchronized reflections on the skin and iris, bypassing print photo overlays.</p>
+                    </div>
+                    <!-- Feature 3: Gesture challenge -->
+                    <div class="feature-card glass-card">
+                        <div class="feature-icon gesture-icon">👤</div>
+                        <h4>Yaw Pose Tracking</h4>
+                        <p>Prompts dynamic head movement challenges. Scale-free horizontal nose offset shifts verify the subject is physical and interactive.</p>
+                    </div>
+                    <!-- Feature 4: Guidance system -->
+                    <div class="feature-card glass-card">
+                        <div class="feature-icon sound-icon">🔊</div>
+                        <h4>AI Speech Guidance</h4>
+                        <p>Browser Text-to-Speech instructions and Web Audio sweeps guide users through liveness checks for a premium experience.</p>
+                    </div>
+                </div>
+            </div>
 
-                    <!-- Challenge Reflection Color Match -->
-                    <div class="kpi-card glass-card">
-                        <div class="kpi-meta">
-                            <span class="kpi-title">Challenge Color Reflections</span>
-                            <span class="kpi-value" id="kpi-reflection-val">N/A</span>
+            <!-- Telemetry Stats Bar -->
+            <div class="stats-bar glass-card">
+                <div class="stat-item">
+                    <span class="stat-val">95.63%</span>
+                    <span class="stat-lbl">Validation Accuracy</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-val">&lt; 1.8s</span>
+                    <span class="stat-lbl">Challenge Window</span>
+                </div>
+                <div class="stat-item">
+                    <span class="stat-val">100%</span>
+                    <span class="stat-lbl">Client Auth</span>
+                </div>
+            </div>
+            
+            <!-- Landing Footer -->
+            <footer class="app-footer">
+                <p>&copy; 2026 AETHER_SHIELD. Powered by deep learning liveness guards.</p>
+            </footer>
+        </div>
+
+        <!-- Active Scanner View (Initially Hidden) -->
+        <div id="scanner-view" class="scanner-container hidden">
+            <!-- Header -->
+            <header class="app-header">
+                <div class="logo-area">
+                    <div class="logo-icon"></div>
+                    <div class="logo-text">
+                        <h1>AETHER_SHIELD</h1>
+                        <p>Anti-Deepfake KYC Verification Guard</p>
+                    </div>
+                </div>
+                <div class="system-status">
+                    <button class="btn-mute" id="btn-home" title="Back to Landing Page" style="margin-right: 12px; background: none; border: none; cursor: pointer; font-size: 1rem; color: #a0aec0; opacity: 0.8; transition: var(--transition-smooth); display: inline-flex; align-items: center; justify-content: center;">🏠</button>
+                    <button class="btn-mute" id="btn-audio-toggle" title="Toggle Audio Assistant">🔊</button>
+                    <span class="status-indicator" id="server-status-dot"></span>
+                    <span id="server-status-text">Connecting to API...</span>
+                </div>
+            </header>
+
+            <!-- Main Body Grid -->
+            <main class="app-grid">
+                <!-- Left Panel: Camera Stream Viewport -->
+                <section class="viewport-panel glass-panel">
+                    <div class="panel-header">
+                        <span class="panel-title">SECURE WEB-CAM FEED</span>
+                        <span class="badge" id="camera-fps">00 FPS</span>
+                    </div>
+                    
+                    <div class="camera-wrapper">
+                        <video id="webcam" autoplay playsinline muted></video>
+                        <canvas id="canvas-overlay"></canvas>
+                        
+                        <div class="face-guide-oval" id="face-guide">
+                            <div class="guide-corner tl"></div>
+                            <div class="guide-corner tr"></div>
+                            <div class="guide-corner bl"></div>
+                            <div class="guide-corner br"></div>
+                            <span class="guide-label" id="guide-instruction">POSITION YOUR FACE HERE</span>
                         </div>
                         
-                        <!-- Reflection Sequence Visual Blocks -->
-                        <div class="reflection-sequence-blocks" id="reflection-blocks">
-                            <div class="color-block pending"></div>
-                            <div class="color-block pending"></div>
-                            <div class="color-block pending"></div>
-                            <div class="color-block pending"></div>
+                        <div class="gesture-prompt-overlay" id="gesture-prompt">
+                            <span class="gesture-arrow" id="gesture-arrow">←</span>
+                            <span class="gesture-text" id="gesture-text">TURN HEAD LEFT</span>
                         </div>
-                        <p class="kpi-desc">Synchronized eye/skin color reflections</p>
+
+                        <div class="verification-status-banner" id="status-banner">
+                            <span class="status-icon">🔒</span>
+                            <span class="status-msg" id="status-message">Ready to Start</span>
+                        </div>
                     </div>
 
-                    <!-- Eye Aspect Ratio (EAR) / Blink Tracker -->
-                    <div class="kpi-card glass-card">
-                        <div class="kpi-meta">
-                            <span class="kpi-title">Eye Aspect Ratio (EAR)</span>
-                            <span class="kpi-value" id="kpi-ear-val">0.00</span>
-                        </div>
-                        <div class="ear-status-badge" id="kpi-blink-badge">EYES DETECTED</div>
-                        <p class="kpi-desc">Blink tracking for static photo prevention</p>
+                    <div class="controls-row">
+                        <button class="btn btn-primary" id="btn-start">
+                            <span class="btn-glow"></span>
+                            START LIVENESS CHECK
+                        </button>
+                        <button class="btn btn-secondary" id="btn-train">
+                            TRAIN MOIRE CNN
+                        </button>
+                    </div>
+                </section>
+
+                <!-- Right Panel: Diagnostics and Metrics Dashboard -->
+                <section class="dashboard-panel glass-panel">
+                    <div class="panel-header">
+                        <span class="panel-title">LIVENESS DIAGNOSTICS</span>
+                        <span class="badge badge-success" id="overall-badge">IDLE</span>
                     </div>
 
-                    <!-- Motion / Landark Jitter Variance -->
-                    <div class="kpi-card glass-card">
-                        <div class="kpi-meta">
-                            <span class="kpi-title">Face Motion Variance</span>
-                            <span class="kpi-value" id="kpi-motion-val">0.00</span>
+                    <div class="kpi-grid">
+                        <div class="kpi-card glass-card">
+                            <div class="kpi-meta">
+                                <span class="kpi-title">Moiré Pattern (CNN Score)</span>
+                                <span class="kpi-value" id="kpi-moire-val">0%</span>
+                            </div>
+                            <div class="kpi-progress-bar">
+                                <div class="progress-fill" id="kpi-moire-fill" style="width: 0%;"></div>
+                            </div>
+                            <p class="kpi-desc">Probability of digital screen reproduction</p>
                         </div>
-                        <div class="kpi-progress-bar">
-                            <div class="progress-fill var-fill" id="kpi-motion-fill" style="width: 0%;"></div>
+
+                        <div class="kpi-card glass-card">
+                            <div class="kpi-meta">
+                                <span class="kpi-title">Challenge Color Reflections</span>
+                                <span class="kpi-value" id="kpi-reflection-val">N/A</span>
+                            </div>
+                            <div class="reflection-sequence-blocks" id="reflection-blocks">
+                                <div class="color-block pending"></div>
+                                <div class="color-block pending"></div>
+                                <div class="color-block pending"></div>
+                                <div class="color-block pending"></div>
+                            </div>
+                            <p class="kpi-desc">Synchronized eye/skin color reflections</p>
                         </div>
-                        <p class="kpi-desc">Micro-movements to detect print spoofing</p>
-                    </div>
-                </div>
 
-                <!-- Final Verification Result Panel -->
-                <div class="result-box glass-card" id="final-result-card">
-                    <h3 id="result-title">Awaiting Verification</h3>
-                    <p id="result-desc">Initiate the liveness test by clicking the button on the left. The system will flash a randomized color sequence to check active reflection.</p>
-                    <button class="btn btn-secondary btn-download" id="btn-download-receipt" style="display: none; margin-top: 10px; padding: 10px; width: 100%; font-size: 0.75rem;">
-                        📥 DOWNLOAD DIAGNOSTICS RECEIPT
-                    </button>
-                </div>
+                        <div class="kpi-card glass-card">
+                            <div class="kpi-meta">
+                                <span class="kpi-title">Eye Aspect Ratio (EAR)</span>
+                                <span class="kpi-value" id="kpi-ear-val">0.00</span>
+                            </div>
+                            <div class="ear-status-badge" id="kpi-blink-badge">EYES DETECTED</div>
+                            <p class="kpi-desc">Blink tracking for static photo prevention</p>
+                        </div>
 
-                <!-- Terminal / Logging Output -->
-                <div class="terminal-log glass-card">
-                    <div class="terminal-header">
-                        <span>SYSTEM_LOG</span>
-                        <span class="pulse-dot"></span>
+                        <div class="kpi-card glass-card">
+                            <div class="kpi-meta">
+                                <span class="kpi-title">Face Motion Variance</span>
+                                <span class="kpi-value" id="kpi-motion-val">0.00</span>
+                            </div>
+                            <div class="kpi-progress-bar">
+                                <div class="progress-fill var-fill" id="kpi-motion-fill" style="width: 0%;"></div>
+                            </div>
+                            <p class="kpi-desc">Micro-movements to detect print spoofing</p>
+                        </div>
                     </div>
-                    <div class="terminal-body" id="log-output">
-                        <p class="log-line text-muted">[SYSTEM] Ready to initialize secure telemetry...</p>
+
+                    <div class="result-box glass-card" id="final-result-card">
+                        <h3 id="result-title">Awaiting Verification</h3>
+                        <p id="result-desc">Initiate the liveness test by clicking the button on the left. The system will flash a randomized color sequence to check active reflection.</p>
+                        <button class="btn btn-secondary btn-download" id="btn-download-receipt" style="display: none; margin-top: 10px; padding: 10px; width: 100%; font-size: 0.75rem;">
+                            📥 DOWNLOAD DIAGNOSTICS RECEIPT
+                        </button>
                     </div>
-                </div>
-            </section>
+
+                    <div class="terminal-log glass-card">
+                        <div class="terminal-header">
+                            <span>SYSTEM_LOG</span>
+                            <span class="pulse-dot"></span>
+                        </div>
+                        <div class="terminal-body" id="log-output">
+                            <p class="log-line text-muted">[SYSTEM] Ready to initialize secure telemetry...</p>
+                        </div>
+                    </div>
+                </section>
+            </main>
             
-        </main>
-        
-        <!-- Footer -->
-        <footer class="app-footer">
-            <p>&copy; 2026 AETHER_SHIELD. Protected by active challenge-response and deep learning guards.</p>
-        </footer>
+            <!-- Footer -->
+            <footer class="app-footer">
+                <p>&copy; 2026 AETHER_SHIELD. Protected by active challenge-response and deep learning guards.</p>
+            </footer>
+        </div>
     </div>
 
     <!-- Hidden image element for canvas capture -->
