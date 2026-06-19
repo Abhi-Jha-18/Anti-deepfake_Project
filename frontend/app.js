@@ -271,14 +271,83 @@ function drawEyeTargets(leftIris, rightIris, ear) {
 }
 
 /* ==========================================================================
-   Capture Frame Helper
+   Capture Frame Helpers
    ========================================================================== */
 function captureFrameBase64() {
     // Draw current video frame onto the hidden canvas
     captureCtx.drawImage(videoEl, 0, 0, captureCanvas.width, captureCanvas.height);
-    // Convert to jpeg base64
+    // Convert to jpeg base64 (used for local print receipt face image)
     const dataURL = captureCanvas.toDataURL('image/jpeg', 0.85);
     return dataURL;
+}
+
+function captureFrameBlob() {
+    return new Promise((resolve) => {
+        // Draw current video frame onto the hidden canvas
+        captureCtx.drawImage(videoEl, 0, 0, captureCanvas.width, captureCanvas.height);
+        // Convert to raw binary JPEG blob for low-latency WebSocket transmission
+        captureCanvas.toBlob((blob) => {
+            resolve(blob);
+        }, 'image/jpeg', 0.85);
+    });
+}
+
+/* ==========================================================================
+   WebSocket Communication Manager
+   ========================================================================== */
+let socket = null;
+
+function connectWebSocket(sessionId) {
+    return new Promise((resolve, reject) => {
+        // Construct WebSocket URI matching backend protocol
+        const wsUrl = API_URL.replace('http://', 'ws://').replace('https://', 'wss://') + `/verify/${sessionId}`;
+        
+        socket = new WebSocket(wsUrl);
+        socket.binaryType = 'arraybuffer';
+        
+        socket.onopen = () => {
+            console.log('[WS] Persistent channel established successfully.');
+            resolve();
+        };
+        
+        socket.onerror = (err) => {
+            console.error('[WS] Connection failed:', err);
+            reject(new Error("WebSocket handshake failed."));
+        };
+        
+        socket.onclose = () => {
+            console.log('[WS] Persistent channel closed.');
+        };
+    });
+}
+
+function sendFrameAndWait(expectedColor, blob) {
+    return new Promise((resolve, reject) => {
+        if (!socket || socket.readyState !== WebSocket.OPEN) {
+            reject(new Error("WebSocket is not in OPEN state."));
+            return;
+        }
+        
+        // Setup handler for backend evaluation response
+        socket.onmessage = (event) => {
+            try {
+                const data = JSON.parse(event.data);
+                resolve(data);
+            } catch (e) {
+                reject(new Error("Invalid response format from server."));
+            }
+        };
+        
+        socket.onerror = (err) => {
+            reject(err);
+        };
+        
+        // 1. Send text metadata frame specifying color challenge expectation
+        socket.send(JSON.stringify({ expected_color: expectedColor }));
+        
+        // 2. Send raw binary blob payload
+        socket.send(blob);
+    });
 }
 
 /* ==========================================================================
@@ -304,7 +373,7 @@ async function runLivenessCheck() {
     playSynthSound('scan');
     
     try {
-        // Step 1: Initialize session on backend
+        // Step 1: Initialize session on backend (REST endpoint)
         const initResponse = await fetch(`${API_URL}/init_session`, { method: 'POST' });
         const initData = await initResponse.json();
         
@@ -319,6 +388,10 @@ async function runLivenessCheck() {
         log(`Session initialized: ${currentSessionId}`, 'info');
         log(`Sequence generated: ${colorSequence.join(' -> ')}`, 'info');
         log(`Expected head turn gesture: ${expectedGesture}`, 'info');
+        
+        // Establish low-latency WebSocket connection
+        log('Establishing WebSocket channel...', 'muted');
+        await connectWebSocket(currentSessionId);
         
         // Update diagnostics reflection blocks to show upcoming sequence
         setupReflectionBlocks(colorSequence);
@@ -348,29 +421,18 @@ async function runLivenessCheck() {
             // Wait 350ms to allow screen light to reach face and webcam to adjust exposure
             await sleep(350);
             
-            // Capture image
-            const frameB64 = captureFrameBase64();
+            // Capture image blob & base64 (base64 only for receipt template)
+            const frameBlob = await captureFrameBlob();
             if (i === 0) {
-                // Save the first front-facing frame for the diagnostics receipt photo
-                firstFrameB64 = frameB64;
+                firstFrameB64 = captureFrameBase64();
             }
             
             // Turn off overlay immediately
             flashOverlay.classList.remove('active');
             
-            // Send frame to API
-            log(`Submitting frame ${i + 1} to API...`, 'muted');
-            const verifyResponse = await fetch(`${API_URL}/verify_frame`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    session_id: currentSessionId,
-                    frame: frameB64,
-                    expected_color: color
-                })
-            });
-            
-            const verifyData = await verifyResponse.json();
+            // Send binary frame to API over WebSocket
+            log(`Submitting binary frame ${i + 1} to WebSocket...`, 'muted');
+            const verifyData = await sendFrameAndWait(color, frameBlob);
             
             if (!verifyData.success) {
                 log(`Analysis failed at step ${i + 1}: ${verifyData.error}`, 'danger');
@@ -414,25 +476,15 @@ async function runLivenessCheck() {
             // Wait 1.8 seconds for user head movement
             await sleep(1800);
             
-            // Capture gesture frame
-            const gestureFrame = captureFrameBase64();
+            // Capture gesture frame blob
+            const gestureBlob = await captureFrameBlob();
             
             // Hide gesture overlay UI
             gesturePrompt.classList.remove('active');
             
-            // Submit gesture frame to API
-            log(`Submitting gesture frame to API...`, 'muted');
-            const gestureResponse = await fetch(`${API_URL}/verify_frame`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    session_id: currentSessionId,
-                    frame: gestureFrame,
-                    expected_color: 'GESTURE'
-                })
-            });
-            
-            const gestureData = await gestureResponse.json();
+            // Submit gesture frame to WebSocket
+            log(`Submitting binary gesture frame to WebSocket...`, 'muted');
+            const gestureData = await sendFrameAndWait('GESTURE', gestureBlob);
             if (!gestureData.success) {
                 log(`Gesture analysis failed: ${gestureData.error}`, 'danger');
                 statusMessage.textContent = 'Verification Interrupted';
@@ -440,7 +492,7 @@ async function runLivenessCheck() {
                 return;
             }
             
-            // Step 4: Final Session Verification
+            // Step 4: Final Session Verification (REST endpoint)
             statusMessage.textContent = 'Processing verdict...';
             log('All challenge frames received. Requesting final liveness verdict...', 'info');
             
@@ -471,6 +523,13 @@ async function runLivenessCheck() {
         faceGuide.className = 'face-guide-oval';
         guideInstruction.textContent = 'POSITION YOUR FACE HERE';
         ctxOverlay.clearRect(0, 0, canvasOverlay.width, canvasOverlay.height);
+        
+        // Clean up WebSocket connection
+        if (socket) {
+            socket.close();
+            socket = null;
+            console.log('[WS] Persistent channel cleaned up in finally block.');
+        }
     }
 }
 
@@ -1084,6 +1143,13 @@ async function goHome() {
     }
     videoEl.srcObject = null;
     ctxOverlay.clearRect(0, 0, canvasOverlay.width, canvasOverlay.height);
+    
+    // Terminate active WebSocket channel
+    if (socket) {
+        socket.close();
+        socket = null;
+        console.log('[WS] Channel terminated upon navigating home.');
+    }
     
     scannerView.classList.add('fade-out-up');
     await sleep(350);

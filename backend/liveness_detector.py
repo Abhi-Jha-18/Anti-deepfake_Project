@@ -42,6 +42,12 @@ class LivenessDetector:
         img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
         return img
 
+    def decode_binary_image(self, img_bytes):
+        """Decodes raw binary image bytes (JPEG/PNG) to OpenCV BGR image."""
+        nparr = np.frombuffer(img_bytes, np.uint8)
+        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        return img
+
     def calculate_ear(self, landmarks, eye_indices, img_w, img_h):
         """Calculates Eye Aspect Ratio (EAR) to detect blinking."""
         coords = []
@@ -74,10 +80,14 @@ class LivenessDetector:
         mean_bgr = np.mean(patch, axis=(0, 1))
         return [float(mean_bgr[2]), float(mean_bgr[1]), float(mean_bgr[0])] # Return RGB
 
-    def process_frame(self, frame_b64):
+    def process_frame(self, frame_data, is_binary=False):
         """Processes a single video frame to extract liveness features."""
         try:
-            img = self.decode_base64_image(frame_b64)
+            if is_binary:
+                img = self.decode_binary_image(frame_data)
+            else:
+                img = self.decode_base64_image(frame_data)
+                
             if img is None:
                 return {"success": False, "error": "Failed to decode image"}
         except Exception as e:
