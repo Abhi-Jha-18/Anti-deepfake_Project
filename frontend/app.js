@@ -717,33 +717,41 @@ async function runLivenessCheck() {
             playSynthSound('scan');
             
             // Wait 1.8 seconds for user head movement
-            await sleep(1800);
+            // Continuous polling over 2.0 seconds (40 samples of 50ms) to capture the head turn peak
+            let gesturePassed = false;
+            const avgBaselineYaw = baselineYawRatios.reduce((a, b) => a + b, 0) / baselineYawRatios.length;
+            
+            for (let t = 0; t < 40; t++) {
+                await sleep(50);
+                if (localFaceLandmarks) {
+                    const noseLm = localFaceLandmarks[1];
+                    if (noseLm) {
+                        noseCoordinatesList.push([noseLm.x, noseLm.y, noseLm.z]);
+                    }
+                    const leftEdge = localFaceLandmarks[234];
+                    const rightEdge = localFaceLandmarks[454];
+                    const yawWidth = rightEdge && leftEdge ? rightEdge.x - leftEdge.x : 0;
+                    const gestureYawRatio = yawWidth > 0 && noseLm ? (noseLm.x - leftEdge.x) / yawWidth : 0.5;
+                    const diff = gestureYawRatio - avgBaselineYaw;
+                    
+                    if (expectedGesture === 'TURN_LEFT') {
+                        // Standard mirrored left turn (positive shift) or lenient threshold
+                        if (diff > 0.04) {
+                            gesturePassed = true;
+                        }
+                    } else if (expectedGesture === 'TURN_RIGHT') {
+                        // Standard mirrored right turn (negative shift) or lenient threshold
+                        if (diff < -0.04) {
+                            gesturePassed = true;
+                        }
+                    }
+                }
+            }
             
             // Ensure face is still tracked
             if (!localFaceLandmarks) {
                 gesturePrompt.classList.remove('active');
                 throw new Error("Face connection lost. Please keep your face inside the guide oval.");
-            }
-            
-            // Collect gesture metrics locally
-            const noseLm = localFaceLandmarks[1];
-            if (noseLm) {
-                noseCoordinatesList.push([noseLm.x, noseLm.y, noseLm.z]);
-            }
-            const leftEdge = localFaceLandmarks[234];
-            const rightEdge = localFaceLandmarks[454];
-            const yawWidth = rightEdge && leftEdge ? rightEdge.x - leftEdge.x : 0;
-            const gestureYawRatio = yawWidth > 0 && noseLm ? (noseLm.x - leftEdge.x) / yawWidth : 0.5;
-            
-            // Evaluate head yaw ratio locally
-            const avgBaselineYaw = baselineYawRatios.reduce((a, b) => a + b, 0) / baselineYawRatios.length;
-            const diff = gestureYawRatio - avgBaselineYaw;
-            
-            let gesturePassed = false;
-            if (expectedGesture === 'TURN_LEFT') {
-                gesturePassed = diff > 0.06; // Mirrored webcam space: left turn shifts right (positive)
-            } else if (expectedGesture === 'TURN_RIGHT') {
-                gesturePassed = diff < -0.06; // right turn shifts left (negative)
             }
             
             // Crop gesture frame patches
