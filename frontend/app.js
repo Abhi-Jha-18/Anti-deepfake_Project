@@ -734,16 +734,9 @@ async function runLivenessCheck() {
                     const gestureYawRatio = yawWidth > 0 && noseLm ? (noseLm.x - leftEdge.x) / yawWidth : 0.5;
                     const diff = gestureYawRatio - avgBaselineYaw;
                     
-                    if (expectedGesture === 'TURN_LEFT') {
-                        // Standard mirrored left turn (positive shift) or lenient threshold
-                        if (diff > 0.04) {
-                            gesturePassed = true;
-                        }
-                    } else if (expectedGesture === 'TURN_RIGHT') {
-                        // Standard mirrored right turn (negative shift) or lenient threshold
-                        if (diff < -0.04) {
-                            gesturePassed = true;
-                        }
+                    // Check if they turned their head in either direction (direction-agnostic to support all webcams and mirroring modes)
+                    if (Math.abs(diff) > 0.025) {
+                        gesturePassed = true;
                     }
                 }
             }
