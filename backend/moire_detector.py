@@ -2,83 +2,98 @@ import os
 import cv2
 import numpy as np
 import base64
-import torch
-import torch.nn as nn
-import torch.optim as optim
-from torch.utils.data import Dataset, DataLoader
-from torchvision import transforms
-from PIL import Image
 
-# 1. CNN Model Definition
-class MoireCNN(nn.Module):
-    def __init__(self):
-        super(MoireCNN, self).__init__()
-        self.features = nn.Sequential(
-            # Input: 3 x 64 x 64
-            nn.Conv2d(3, 16, kernel_size=3, padding=1),
-            nn.BatchNorm2d(16),
-            nn.ReLU(),
-            nn.MaxPool2d(kernel_size=2, stride=2), # Output: 16 x 32 x 32
-            
-            nn.Conv2d(16, 32, kernel_size=3, padding=1),
-            nn.BatchNorm2d(32),
-            nn.ReLU(),
-            nn.MaxPool2d(kernel_size=2, stride=2), # Output: 32 x 16 x 16
-            
-            nn.Conv2d(32, 64, kernel_size=3, padding=1),
-            nn.BatchNorm2d(64),
-            nn.ReLU(),
-            nn.MaxPool2d(kernel_size=2, stride=2), # Output: 64 x 8 x 8
-        )
-        self.classifier = nn.Sequential(
-            nn.Linear(64 * 8 * 8, 128),
-            nn.ReLU(),
-            nn.Dropout(0.5),
-            nn.Linear(128, 2) # Classes: 0 = Real, 1 = Screen (Spoof)
-        )
+# Lazy load PyTorch classes for training
+MoireCNN = None
+MoireDataset = None
 
-    def forward(self, x):
-        x = self.features(x)
-        x = x.view(x.size(0), -1)
-        x = self.classifier(x)
-        return x
+def _init_training_classes():
+    global MoireCNN, MoireDataset
+    if MoireCNN is not None:
+        return
+    import torch
+    import torch.nn as nn
+    from torch.utils.data import Dataset
+    from PIL import Image
+    
+    class PyTorchMoireCNN(nn.Module):
+        def __init__(self):
+            super(PyTorchMoireCNN, self).__init__()
+            self.features = nn.Sequential(
+                # Input: 3 x 64 x 64
+                nn.Conv2d(3, 16, kernel_size=3, padding=1),
+                nn.BatchNorm2d(16),
+                nn.ReLU(),
+                nn.MaxPool2d(kernel_size=2, stride=2), # Output: 16 x 32 x 32
+                
+                nn.Conv2d(16, 32, kernel_size=3, padding=1),
+                nn.BatchNorm2d(32),
+                nn.ReLU(),
+                nn.MaxPool2d(kernel_size=2, stride=2), # Output: 32 x 16 x 16
+                
+                nn.Conv2d(32, 64, kernel_size=3, padding=1),
+                nn.BatchNorm2d(64),
+                nn.ReLU(),
+                nn.MaxPool2d(kernel_size=2, stride=2), # Output: 64 x 8 x 8
+            )
+            self.classifier = nn.Sequential(
+                nn.Linear(64 * 8 * 8, 128),
+                nn.ReLU(),
+                nn.Dropout(0.5),
+                nn.Linear(128, 2) # Classes: 0 = Real, 1 = Screen (Spoof)
+            )
 
-# 2. PyTorch Dataset Loader
-class MoireDataset(Dataset):
-    def __init__(self, data_dir, transform=None):
-        self.data_dir = data_dir
-        self.transform = transform
-        self.samples = []
-        
-        real_dir = os.path.join(data_dir, "real")
-        screen_dir = os.path.join(data_dir, "screen")
-        
-        # Load real images (Label 0)
-        if os.path.exists(real_dir):
-            for f in os.listdir(real_dir):
-                if f.endswith('.png') or f.endswith('.jpg'):
-                    self.samples.append((os.path.join(real_dir, f), 0))
-                    
-        # Load screen images (Label 1)
-        if os.path.exists(screen_dir):
-            for f in os.listdir(screen_dir):
-                if f.endswith('.png') or f.endswith('.jpg'):
-                    self.samples.append((os.path.join(screen_dir, f), 1))
-                    
-    def __len__(self):
-        return len(self.samples)
-        
-    def __getitem__(self, idx):
-        path, label = self.samples[idx]
-        image = Image.open(path).convert('RGB')
-        
-        if self.transform:
-            image = self.transform(image)
+        def forward(self, x):
+            x = self.features(x)
+            x = x.view(x.size(0), -1)
+            x = self.classifier(x)
+            return x
+
+    class PyTorchMoireDataset(Dataset):
+        def __init__(self, data_dir, transform=None):
+            self.data_dir = data_dir
+            self.transform = transform
+            self.samples = []
             
-        return image, label
+            real_dir = os.path.join(data_dir, "real")
+            screen_dir = os.path.join(data_dir, "screen")
+            
+            # Load real images (Label 0)
+            if os.path.exists(real_dir):
+                for f in os.listdir(real_dir):
+                    if f.endswith('.png') or f.endswith('.jpg'):
+                        self.samples.append((os.path.join(real_dir, f), 0))
+                        
+            # Load screen images (Label 1)
+            if os.path.exists(screen_dir):
+                for f in os.listdir(screen_dir):
+                    if f.endswith('.png') or f.endswith('.jpg'):
+                        self.samples.append((os.path.join(screen_dir, f), 1))
+                        
+        def __len__(self):
+            return len(self.samples)
+            
+        def __getitem__(self, idx):
+            path, label = self.samples[idx]
+            image = Image.open(path).convert('RGB')
+            
+            if self.transform:
+                image = self.transform(image)
+                
+            return image, label
+
+    MoireCNN = PyTorchMoireCNN
+    MoireDataset = PyTorchMoireDataset
 
 def train_model(data_dir="dataset", model_path="moire_cnn.pth", epochs=15, batch_size=32, force_generate=True):
     print("Initializing Moire CNN Training...")
+    _init_training_classes()
+    
+    import torch
+    import torch.nn as nn
+    import torch.optim as optim
+    from torch.utils.data import DataLoader
+    from torchvision import transforms
     
     # Check if dataset exists or force generate is requested
     if force_generate or not os.path.exists(os.path.join(data_dir, "real")) or len(os.listdir(os.path.join(data_dir, "real"))) == 0:
@@ -175,115 +190,101 @@ def train_model(data_dir="dataset", model_path="moire_cnn.pth", epochs=15, batch
     print(f"Model trained successfully and saved to {os.path.abspath(model_path)}")
     return model
 
-# 4. Model Inference
+# Model Inference via ONNX Runtime
 class MoirePredictor:
     def __init__(self, model_path="moire_cnn.pth"):
         self.model_path = model_path
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-        self.model = None
-        self.transform = transforms.Compose([
-            transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
-        ])
+        self.session = None
         self.load_model()
         
     def load_model(self):
-        if os.path.exists(self.model_path):
-            self.model = MoireCNN().to(self.device)
-            # Load weights mapping to CPU or GPU automatically
-            self.model.load_state_dict(torch.load(self.model_path, map_location=self.device))
-            self.model.eval()
-            print(f"Moire CNN loaded weights from {self.model_path}")
+        onnx_model_path = self.model_path.replace(".pth", ".onnx")
+        if os.path.exists(onnx_model_path):
+            import onnxruntime
+            self.session = onnxruntime.InferenceSession(onnx_model_path)
+            print(f"Moire CNN loaded weights from {onnx_model_path} via ONNX Runtime.")
         else:
-            print(f"Model weights not found at {self.model_path}. Predictor initialized in fallback mode.")
-            self.model = None
+            print(f"ONNX model not found at {onnx_model_path}. Predictor initialized in fallback mode.")
+            self.session = None
+
+    def predict_numpy_patches(self, patches_np):
+        """
+        Predicts whether face patches contain moire screen lines using batched ONNX Runtime inference.
+        patches_np: List of numpy BGR images (64x64)
+        Returns: Max screen spoof probability (0.0 to 1.0)
+        """
+        if self.session is None:
+            self.load_model()
+            if self.session is None:
+                return 0.0
+                
+        spoof_probs = []
+        preprocessed_patches = []
+        
+        for img in patches_np:
+            try:
+                if img is None:
+                    continue
+                # 1. Resize to 64x64
+                img_resized = cv2.resize(img, (64, 64))
+                # 2. Convert BGR to RGB
+                img_rgb = cv2.cvtColor(img_resized, cv2.COLOR_BGR2RGB)
+                # 3. Convert to float32 and scale to [0, 1]
+                img_float = img_rgb.astype(np.float32) / 255.0
+                # 4. Transpose from (H, W, C) to (C, H, W)
+                img_transposed = img_float.transpose(2, 0, 1)
+                # 5. Normalize: (x - mean) / std
+                mean = np.array([0.485, 0.456, 0.406], dtype=np.float32).reshape(3, 1, 1)
+                std = np.array([0.229, 0.224, 0.225], dtype=np.float32).reshape(3, 1, 1)
+                img_normalized = (img_transposed - mean) / std
+                
+                preprocessed_patches.append(img_normalized)
+            except Exception as e:
+                print(f"Error preprocessing patch: {str(e)}")
+                continue
+                
+        if len(preprocessed_patches) == 0:
+            return 0.0
+            
+        try:
+            # Batch inference: stack along axis 0
+            batch_input = np.stack(preprocessed_patches, axis=0) # Shape: (N, 3, 64, 64)
+            
+            # Run ONNX inference session
+            input_name = self.session.get_inputs()[0].name
+            ort_inputs = {input_name: batch_input}
+            ort_outputs = self.session.run(None, ort_inputs)
+            
+            # Postprocess outputs (Apply Softmax in NumPy)
+            logits = ort_outputs[0] # Shape: (N, 2)
+            exp_logits = np.exp(logits - np.max(logits, axis=1, keepdims=True))
+            probs = exp_logits / np.sum(exp_logits, axis=1, keepdims=True)
+            
+            # Class 1 is screen spoof
+            spoof_probs = probs[:, 1]
+            return float(np.max(spoof_probs))
+        except Exception as e:
+            print(f"Error during ONNX batch inference: {str(e)}")
+            return 0.0
 
     def predict_patches(self, patches_b64):
         """
         Predicts whether face patches contain moire screen lines.
         patches_b64: List of base64-encoded cropped image patches (64x64)
-        Returns: Average screen spoof probability (0.0 to 1.0)
+        Returns: Max screen spoof probability (0.0 to 1.0)
         """
-        # Fallback if model is not loaded yet
-        if self.model is None:
-            # Check if model has been trained in the background
-            self.load_model()
-            if self.model is None:
-                # Return default zero probability if not trained
-                return 0.0
-                
-        spoof_probs = []
-        
+        patches_np = []
         for p_b64 in patches_b64:
             try:
-                # Decode patch image
                 img_data = base64.b64decode(p_b64)
                 nparr = np.frombuffer(img_data, np.uint8)
                 img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-                if img is None:
-                    continue
-                    
-                # Preprocess patch
-                img = cv2.resize(img, (64, 64))
-                img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-                pil_img = Image.fromarray(img_rgb)
-                tensor_img = self.transform(pil_img).unsqueeze(0).to(self.device)
-                
-                # Model inference
-                with torch.no_grad():
-                    outputs = self.model(tensor_img)
-                    probs = torch.softmax(outputs, dim=1)
-                    # Class 1 is screen spoof
-                    spoof_prob = float(probs[0][1].item())
-                    spoof_probs.append(spoof_prob)
+                if img is not None:
+                    patches_np.append(img)
             except Exception as e:
-                print(f"Error predicting patch: {str(e)}")
-                continue
+                print(f"Error decoding base64 patch: {str(e)}")
                 
-        if len(spoof_probs) == 0:
-            return 0.0
-            
-        # Return the maximum probability of spoof across all cropped patches (forehead, left cheek, right cheek)
-        # Using max is safer for security than average, as moire might be stronger on forehead than cheeks
-        return float(np.max(spoof_probs))
-
-    def predict_numpy_patches(self, patches_np):
-        """
-        Predicts whether face patches contain moire screen lines.
-        patches_np: List of numpy BGR images (64x64)
-        Returns: Max screen spoof probability (0.0 to 1.0)
-        """
-        if self.model is None:
-            self.load_model()
-            if self.model is None:
-                return 0.0
-                
-        spoof_probs = []
-        for img in patches_np:
-            try:
-                if img is None:
-                    continue
-                # Preprocess patch
-                img = cv2.resize(img, (64, 64))
-                img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-                pil_img = Image.fromarray(img_rgb)
-                tensor_img = self.transform(pil_img).unsqueeze(0).to(self.device)
-                
-                # Model inference
-                with torch.no_grad():
-                    outputs = self.model(tensor_img)
-                    probs = torch.softmax(outputs, dim=1)
-                    # Class 1 is screen spoof
-                    spoof_prob = float(probs[0][1].item())
-                    spoof_probs.append(spoof_prob)
-            except Exception as e:
-                print(f"Error predicting patch: {str(e)}")
-                continue
-                
-        if len(spoof_probs) == 0:
-            return 0.0
-            
-        return float(np.max(spoof_probs))
+        return self.predict_numpy_patches(patches_np)
 
 if __name__ == "__main__":
     import argparse
