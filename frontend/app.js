@@ -905,17 +905,28 @@ function displayFinalVerdict(data) {
         resultCard.className = 'result-box glass-card pass';
         resultTitle.textContent = '🔒 KYC VERIFICATION PASSED';
         resultTitle.style.color = 'var(--color-success)';
+        
+        // Store verification status and data
+        sessionStorage.setItem('aether_shield_verified', 'true');
+        sessionStorage.setItem('aether_shield_session_data', JSON.stringify(data));
+        
         resultDesc.innerHTML = `
             <strong>Status: Verified Human</strong><br>
             • Color Reflection correlation check passed (${matchPercent}% match rate).<br>
             • No digital moiré grid patterns detected (Moire probability: ${(d.max_moire_prob * 100).toFixed(1)}%).<br>
-            • Natural micro-movements detected (Pose variance: ${d.nose_variance.toExponential(2)}).
+            • Natural micro-movements detected (Pose variance: ${d.nose_variance.toExponential(2)}).<br>
+            <span style="color: var(--color-primary); font-family: var(--font-code); font-size: 0.8rem; display: block; margin-top: 10px; animation: flash 1s infinite alternate;">🔓 SECURE PORTAL UNLOCKED. REDIRECTING IN 3s...</span>
         `;
         log('VERDICT: Secure handshake complete. User verified as live human.', 'success');
-        statusMessage.textContent = 'VERIFIED';
+        log('Redirecting to secure portal...', 'info');
+        statusMessage.textContent = 'ACCESS GRANTED';
         
         playSynthSound('success');
-        speak("Verification passed. Handshake secure.");
+        speak("Verification passed. Access granted.");
+        
+        setTimeout(() => {
+            window.location.href = 'dashboard.html';
+        }, 3000);
     } else {
         badge.className = 'badge badge-danger';
         badge.textContent = 'SPOOF';

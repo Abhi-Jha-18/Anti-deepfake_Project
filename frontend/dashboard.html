@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AETHER_SHIELD Secure Portal</title>
+    <!-- Google Fonts: Outfit for UI, JetBrains Mono for Code/Logs -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,300;0,400;1,300&family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .dashboard-container {
+            width: 100%;
+            max-width: 600px;
+            padding: 40px;
+            text-align: center;
+        }
+        .success-shield {
+            font-size: 4rem;
+            margin-bottom: 20px;
+            text-shadow: 0 0 20px rgba(0, 230, 118, 0.4);
+            animation: pulse-shield 2s infinite ease-in-out;
+        }
+        @keyframes pulse-shield {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+        .session-info-box {
+            margin: 30px 0;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.02);
+            border: 1px dashed rgba(0, 240, 255, 0.2);
+            border-radius: 8px;
+            text-align: left;
+        }
+        .session-info-line {
+            display: flex;
+            justify-content: space-between;
+            margin: 10px 0;
+            font-family: var(--font-code);
+            font-size: 0.85rem;
+        }
+        .label {
+            color: #64748b;
+        }
+        .value {
+            color: var(--color-primary);
+        }
+    </style>
+    <script>
+        // Gatekeeper protection script
+        if (sessionStorage.getItem('aether_shield_verified') !== 'true') {
+            window.location.href = 'index.html';
+        }
+    </script>
+</head>
+<body>
+    <div class="dashboard-container glass-card">
+        <div class="success-shield">🛡️</div>
+        <h2 class="hero-title" style="font-size: 2rem; margin-bottom: 10px;">PORTAL UNLOCKED</h2>
+        <p class="hero-subtitle" style="font-size: 1rem; color: var(--color-success);">Welcome. Biometric liveness check successfully verified your presence.</p>
+        
+        <div class="session-info-box">
+            <h4 style="margin-bottom: 15px; font-size: 0.9rem; text-transform: uppercase; letter-spacing: 1px; color: #94a3b8;">Biometric Handshake Metadata</h4>
+            <div class="session-info-line">
+                <span class="label">TELEMETRY_ID:</span>
+                <span class="value" id="session-id">LOADING...</span>
+            </div>
+            <div class="session-info-line">
+                <span class="label">REFLECTION_MATCH:</span>
+                <span class="value" id="reflection-match">LOADING...</span>
+            </div>
+            <div class="session-info-line">
+                <span class="label">MOIRÉ_PROBABILITY:</span>
+                <span class="value" id="moire-prob">LOADING...</span>
+            </div>
+            <div class="session-info-line">
+                <span class="label">BIOMETRIC_STATUS:</span>
+                <span class="value" style="color: var(--color-success);">VERIFIED_HUMAN</span>
+            </div>
+        </div>
+        
+        <button class="btn btn-secondary" style="width: 100%; padding: 15px;" onclick="logOut()">
+            REVOKE AUTHORIZATION (LOGOUT)
+        </button>
+    </div>
+
+    <script>
+        // Populate dashboard data from session storage
+        document.addEventListener('DOMContentLoaded', () => {
+            const dataStr = sessionStorage.getItem('aether_shield_session_data');
+            if (dataStr) {
+                try {
+                    const data = JSON.parse(dataStr);
+                    const d = data.details;
+                    document.getElementById('session-id').textContent = data.session_id || 'N/A';
+                    document.getElementById('reflection-match').textContent = `${Math.round(d.reflection_score * 100)}%`;
+                    document.getElementById('moire-prob').textContent = `${(d.max_moire_prob * 100).toFixed(1)}%`;
+                } catch (e) {
+                    console.error("Failed to parse session data", e);
+                }
+            }
+        });
+
+        function logOut() {
+            sessionStorage.removeItem('aether_shield_verified');
+            sessionStorage.removeItem('aether_shield_session_data');
+            window.location.href = 'index.html';
+        }
+    </script>
+</body>
+</html>
