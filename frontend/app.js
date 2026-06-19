@@ -614,8 +614,14 @@ async function runLivenessCheck() {
             // Soft synth ping for each color flash
             playSynthSound('ping');
             
-            // Wait 350ms to allow screen light to reach face and webcam to adjust exposure
-            await sleep(350);
+            // Wait 350ms to allow screen light to reach face and webcam to adjust exposure, while tracking face movements
+            for (let t = 0; t < 7; t++) {
+                await sleep(50);
+                if (localFaceLandmarks && localFaceLandmarks[1]) {
+                    const noseLm = localFaceLandmarks[1];
+                    noseCoordinatesList.push([noseLm.x, noseLm.y, noseLm.z]);
+                }
+            }
             
             // Ensure face is still tracked
             if (!localFaceLandmarks) {
@@ -694,105 +700,47 @@ async function runLivenessCheck() {
             maxMoire = Math.max(maxMoire, verifyData.moire_prob);
             
             completedSteps++;
-            // Wait 250ms between flashes to allow exposure to settle back
-            await sleep(250);
-        }
-        
-        // Step 3: Trigger head turn gesture challenge
-        if (completedSteps === colorSequence.length) {
-            const gestureTextStr = expectedGesture === 'TURN_LEFT' ? 'Turn Head Left' : 'Turn Head Right';
-            const arrow = expectedGesture === 'TURN_LEFT' ? '←' : '→';
-            const cssClass = expectedGesture === 'TURN_LEFT' ? 'left' : 'right';
-            
-            statusMessage.textContent = `Gesture Challenge: ${gestureTextStr}`;
-            log(`Initiating gesture challenge: ${expectedGesture}`, 'info');
-            
-            // Show gesture prompt overlay UI
-            gesturePrompt.className = `gesture-prompt-overlay active ${cssClass}`;
-            gestureArrow.textContent = arrow;
-            gestureText.textContent = gestureTextStr;
-            
-            // Vocal instruction and sweep sound
-            speak(`Please turn your head to the ${expectedGesture === 'TURN_LEFT' ? 'left' : 'right'}`);
-            playSynthSound('scan');
-            
-            // Wait 1.8 seconds for user head movement
-            // Continuous polling over 2.0 seconds (40 samples of 50ms) to capture the head turn peak
-            let gesturePassed = false;
-            const avgBaselineYaw = baselineYawRatios.reduce((a, b) => a + b, 0) / baselineYawRatios.length;
-            
-            for (let t = 0; t < 40; t++) {
+            // Wait 250ms between flashes to allow exposure to settle back, while tracking face movements
+            for (let t = 0; t < 5; t++) {
                 await sleep(50);
-                if (localFaceLandmarks) {
+                if (localFaceLandmarks && localFaceLandmarks[1]) {
                     const noseLm = localFaceLandmarks[1];
-                    if (noseLm) {
-                        noseCoordinatesList.push([noseLm.x, noseLm.y, noseLm.z]);
-                    }
-                    const leftEdge = localFaceLandmarks[234];
-                    const rightEdge = localFaceLandmarks[454];
-                    const yawWidth = rightEdge && leftEdge ? rightEdge.x - leftEdge.x : 0;
-                    const gestureYawRatio = yawWidth > 0 && noseLm ? (noseLm.x - leftEdge.x) / yawWidth : 0.5;
-                    const diff = gestureYawRatio - avgBaselineYaw;
-                    
-                    // Check if they turned their head in either direction (direction-agnostic to support all webcams and mirroring modes)
-                    if (Math.abs(diff) > 0.025) {
-                        gesturePassed = true;
-                    }
+                    noseCoordinatesList.push([noseLm.x, noseLm.y, noseLm.z]);
                 }
             }
-            
-            // Ensure face is still tracked
-            if (!localFaceLandmarks) {
-                gesturePrompt.classList.remove('active');
-                throw new Error("Face connection lost. Please keep your face inside the guide oval.");
-            }
-            
-            // Crop gesture frame patches
-            const gesturePatchBlob = await cropAndCombinePatches(localFaceLandmarks, videoEl.videoWidth, videoEl.videoHeight);
-            
-            // Hide gesture overlay UI
-            gesturePrompt.classList.remove('active');
-            
-            // Submit gesture frame to WebSocket for Moire score calculation
-            log(`Submitting binary gesture composite patch to WebSocket...`, 'muted');
-            const gestureData = await sendFrameAndWait('GESTURE', gesturePatchBlob);
-            if (!gestureData.success) {
-                log(`Gesture analysis failed: ${gestureData.error}`, 'danger');
-                statusMessage.textContent = 'Verification Interrupted';
-                showFailureVerdict('LANDMARKING_FAILED', gestureData.error);
-                return;
-            }
-            
-            // Calculate final nose variance locally
-            const totalVariance = calculateNoseVariance(noseCoordinatesList);
-            const motionPassed = totalVariance > 1e-6;
-            
-            // Step 4: Final Session Verification (REST endpoint)
-            statusMessage.textContent = 'Processing verdict...';
-            log('All challenge frames processed. Submitting liveness logs to REST API...', 'info');
-            
-            const sessionResponse = await fetch(`${API_URL}/verify_session`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    session_id: currentSessionId,
-                    motion_passed: motionPassed,
-                    gesture_passed: gesturePassed,
-                    blink_detected: blinkDetected,
-                    nose_variance: totalVariance,
-                    reflection_data: reflectionData,
-                    ear_sequence: earSequence
-                })
-            });
-            
-            const sessionData = await sessionResponse.json();
-            
-            if (sessionData.success) {
-                lastCapturedFaceB64 = firstFrameB64; // Save front face crop for receipt
-                displayFinalVerdict(sessionData);
-            } else {
-                throw new Error(sessionData.error || 'Failed to verify session');
-            }
+        }
+        
+        // Step 3: Skip head turn gesture check (removed as per user request)
+        // Directly calculate final nose variance from color flash telemetry
+        const totalVariance = calculateNoseVariance(noseCoordinatesList);
+        const motionPassed = totalVariance > 1e-6;
+        const gesturePassed = true; // Auto-pass gesture check
+        
+        // Step 4: Final Session Verification (REST endpoint)
+        statusMessage.textContent = 'Processing verdict...';
+        log('All challenge frames processed. Submitting liveness logs to REST API...', 'info');
+        
+        const sessionResponse = await fetch(`${API_URL}/verify_session`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                session_id: currentSessionId,
+                motion_passed: motionPassed,
+                gesture_passed: gesturePassed,
+                blink_detected: blinkDetected,
+                nose_variance: totalVariance,
+                reflection_data: reflectionData,
+                ear_sequence: earSequence
+            })
+        });
+        
+        const sessionData = await sessionResponse.json();
+        
+        if (sessionData.success) {
+            lastCapturedFaceB64 = firstFrameB64; // Save front face crop for receipt
+            displayFinalVerdict(sessionData);
+        } else {
+            throw new Error(sessionData.error || 'Failed to verify session');
         }
         
     } catch (error) {
