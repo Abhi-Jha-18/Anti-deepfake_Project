@@ -242,7 +242,7 @@ async function initFaceLandmarker() {
     }
     try {
         log("Initializing local FaceLandmarker...", "info");
-        const visionModule = await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.8/vision_bundle.js");
+        const visionModule = await import("./vision_bundle.js");
         const { FilesetResolver, FaceLandmarker: FL } = visionModule;
         
         const filesetResolver = await FilesetResolver.forVisionTasks(
