@@ -236,6 +236,10 @@ let localFaceLandmarks = null;
 let lastVideoTime = -1;
 
 async function initFaceLandmarker() {
+    if (window.location.protocol === 'file:') {
+        log("CRITICAL: Running via file:// protocol (double-clicked index.html). Browsers block WebAssembly and dynamic CDN imports on local files. Please run the frontend via a local server (e.g., run 'npx serve frontend' in your terminal and open http://localhost:3000) to load MediaPipe.", "danger");
+        return;
+    }
     try {
         log("Initializing local FaceLandmarker...", "info");
         const visionModule = await import("https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.8/vision_bundle.js");
